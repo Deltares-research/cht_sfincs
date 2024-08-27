@@ -25,8 +25,6 @@ import datashader as ds
 import datashader.transfer_functions as tf
 from datashader.utils import export_image
 
-from cht.misc.misc_tools import interp2
-
 class SfincsMask:
     def __init__(self, model):
         self.model       = model

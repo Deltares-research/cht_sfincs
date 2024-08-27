@@ -9,7 +9,7 @@ import xarray as xr
 from pyproj import Transformer
 import rioxarray
 
-from cht.misc.misc_tools import interp2
+from cht_utils.misc_tools import interp2
 
 class SfincsInitialConditions:
 

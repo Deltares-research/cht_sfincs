@@ -15,14 +15,14 @@ Created on Sat Jun 18 09:03:08 2022
 import os
 from pyproj import CRS
 
-from cht.model_builder.model_builder import ModelBuilder
-from cht.sfincs.sfincs import SFINCS
-from cht.sfincs.quadtree import QuadtreeGrid, QuadtreeMask
-from cht.sfincs.subgrid import SubgridTableQuadtree, SubgridTableRegular 
-from cht.sfincs.regulargrid import RegularGrid
-import cht.misc.fileops as fo
-from cht.tiling.tiling import make_topobathy_tiles
-from cht.bathymetry.bathymetry_database import bathymetry_database
+from cht_model_builder.model_builder import ModelBuilder
+from cht_sfincs.sfincs import SFINCS
+from cht_sfincs.quadtree import QuadtreeGrid, QuadtreeMask
+from cht_sfincs.subgrid import SubgridTableQuadtree, SubgridTableRegular 
+from cht_sfincs.regulargrid import RegularGrid
+import cht_utils.fileops as fo
+from cht_tiling.tiling import make_topobathy_tiles
+from cht_bathymetry.bathymetry_database import bathymetry_database
 
 class SfincsBuilder(ModelBuilder):
     def __init__(self, *args, **kwargs):

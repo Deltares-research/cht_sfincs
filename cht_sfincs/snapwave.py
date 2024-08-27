@@ -13,7 +13,7 @@ from matplotlib import path
 import xugrid as xu
 import xarray as xr
 
-from cht.misc.pli_file import pol2gdf, gdf2pol
+from cht_utils.pli_file import pol2gdf, gdf2pol
 
 
 class SnapWaveMask:

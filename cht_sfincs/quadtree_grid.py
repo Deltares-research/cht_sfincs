@@ -25,8 +25,6 @@ import datashader as ds
 import datashader.transfer_functions as tf
 from datashader.utils import export_image
 
-from cht.misc.misc_tools import interp2
-
     
 class SfincsQuadtreeGrid:
     def __init__(self, model, crs=None, regular_grid=None, mask=None):

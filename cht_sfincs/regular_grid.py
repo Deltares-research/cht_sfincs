@@ -15,7 +15,6 @@ import math
 import time
 import xarray as xr
 from affine import Affine
-from cht.bathymetry.bathymetry_database import bathymetry_database
 import xugrid as xu
 #from .to_xugrid import xug
 import warnings
@@ -24,6 +23,8 @@ np.warnings = warnings
 import datashader as ds
 import datashader.transfer_functions as tf
 from datashader.utils import export_image
+
+from cht_bathymetry.bathymetry_database import bathymetry_database
 
 class SfincsRegularGrid:
     def __init__(self, model):

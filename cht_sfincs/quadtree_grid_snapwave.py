@@ -28,7 +28,7 @@ import datashader as ds
 import datashader.transfer_functions as tf
 from datashader.utils import export_image
 
-from cht.misc.misc_tools import interp2
+from cht_utils.misc_tools import interp2
 
 
 def snapwave_quadtree2mesh(qtr, file_name=None):

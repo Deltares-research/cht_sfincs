@@ -8,7 +8,7 @@ import geopandas as gpd
 import shapely
 import pandas as pd
 
-from cht.misc.pli_file import pli2gdf, gdf2pli
+from cht_utils.pli_file import pli2gdf, gdf2pli
 
 
 class SfincsWaveMakers:
