@@ -11,8 +11,8 @@ import math
 # import matplotlib.pyplot as plt
 from pyproj import Transformer
 
-from cht.misc.misc_tools import interp2
-from cht.bathymetry.bathymetry_database import bathymetry_database
+from cht_utils.misc_tools import interp2
+from cht_bathymetry.bathymetry_database import bathymetry_database
 
 
 class RegularGrid:

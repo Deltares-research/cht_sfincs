@@ -10,9 +10,9 @@ from pyproj import Transformer
 from scipy import interpolate
 #import time
 
-#from cht.sfincs.quadtree import QuadtreeGrid
-from cht.misc.misc_tools import interp2
-from cht.bathymetry.bathymetry_database import bathymetry_database
+#from cht_sfincs.quadtree import QuadtreeGrid
+from cht_utils.misc_tools import interp2
+from cht_bathymetry.bathymetry_database import bathymetry_database
     
 class SubgridTableQuadtree:
 

@@ -956,9 +956,9 @@ class SFINCS:
             quadtree.make_index_tiles(path, zoom_range=zoom_range)
             return
         
-        from cht.tiling.tiling import deg2num
-        from cht.tiling.tiling import num2deg
-        import cht.misc.fileops as fo
+        from cht_tiling.tiling import deg2num
+        from cht_tiling.tiling import num2deg
+        import cht_utils.fileops as fo
         
         if not zoom_range:
             zoom_range = [0, 13]

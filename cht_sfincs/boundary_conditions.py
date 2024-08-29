@@ -207,7 +207,7 @@ class SfincsBoundaryConditions:
             print("No boundary points found!")
             return
 
-        from cht.tide.tide_predict import predict
+        from cht_tide.tide_predict import predict
 
         if not file_name:
             if not self.model.input.variables.bzsfile:

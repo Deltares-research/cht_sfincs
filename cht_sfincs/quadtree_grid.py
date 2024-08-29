@@ -809,7 +809,7 @@ class SfincsQuadtreeGrid:
 
     def get_bathymetry(self, bathymetry_sets, quiet=True):
         
-        from cht.bathymetry.bathymetry_database import bathymetry_database
+        from cht_bathymetry.bathymetry_database import bathymetry_database
 
         if not quiet:
             print("Getting bathymetry data ...")
@@ -1711,9 +1711,9 @@ class SfincsQuadtreeGrid:
     def make_index_tiles(self, path, zoom_range=None, format=0):
         
         import math
-        from cht.tiling.tiling import deg2num
-        from cht.tiling.tiling import num2deg
-        import cht.misc.fileops as fo
+        from cht_tiling.tiling import deg2num
+        from cht_tiling.tiling import num2deg
+        import cht_utils.fileops as fo
         
         npix = 256
         

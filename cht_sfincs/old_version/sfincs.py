@@ -19,10 +19,10 @@ import math
 from pyproj import CRS
 from pyproj import Transformer
 
-from cht.misc.geometry import RegularGrid
-from cht.misc.geometry import Point
-from cht.misc.deltares_ini import IniStruct
-from cht.tiling import tiling
+from cht_utils.geometry import RegularGrid
+from cht_utils.geometry import Point
+from cht_utils.deltares_ini import IniStruct
+from cht_tiling import tiling
 
 class SFINCS:
     
@@ -277,7 +277,7 @@ class SFINCS:
             print("No boundary points found!")
             return
 
-        from cht.tide.tide_predict import predict
+        from cht_tide.tide_predict import predict
 
         if not file_name:
             if not self.input.bzsfile:
@@ -930,9 +930,9 @@ class SFINCS:
             quadtree.make_index_tiles(path, zoom_range=zoom_range)
             return
         
-        from cht.tiling.tiling import deg2num
-        from cht.tiling.tiling import num2deg
-        import cht.misc.fileops as fo
+        from cht_tiling.tiling import deg2num
+        from cht_tiling.tiling import num2deg
+        import cht_utils.fileops as fo
         
         if not zoom_range:
             zoom_range = [0, 13]

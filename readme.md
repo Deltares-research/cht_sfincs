@@ -12,3 +12,25 @@ pip install -e .
 or something like:
 
 pip install -e d:\checkouts\github\cht_sfincs
+
+
+
+To build the cht_sfincs package, open Anaconda Powershell.
+
+To make sure you have the latest version of build:
+
+python -m pip install --upgrade build
+
+and to build the package, e.g.: 
+
+cd d:\checkouts\github\cht_sfincs
+
+python -m build
+
+Upload to Pypi with:
+
+cd d:\checkouts\github\cht_sfincs
+
+python -m pip install --upgrade twine
+
+python -m twine upload dist/*
