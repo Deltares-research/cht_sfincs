@@ -146,7 +146,14 @@ class SfincsBoundaryConditions:
         
         # WL      
         file_name = os.path.join(self.model.path, self.model.input.variables.bzsfile)
+
+        # Check if file exists
+        if not os.path.exists(file_name):
+            print(f"Warning! File {file_name} does not exist!")
+            return
+
         dffile = read_timeseries_file(file_name, tref)
+
         # Loop through boundary points
         for ip, point in self.gdf.iterrows():
             point["timeseries"]["time"] = dffile.index
@@ -220,10 +227,15 @@ class SfincsBoundaryConditions:
                               
 
         # Make boundary conditions based on bca file
-        for point in self.flow_boundary_point:
+        for icol, point in self.gdf.iterrows():
             v = predict(point.astro, times) + offset
             ts = pd.Series(v, index=times)
-            point.data = pd.Series(v, index=times)
+            df = pd.DataFrame()     
+            df["time"] = ts
+            df["wl"] = v
+            df = df.set_index("time")
+            self.gdf.at[icol, "timeseries"] = df
+            # point.data = pd.Series(v, index=times)
                     
         if write_file:            
             self.write_flow_boundary_conditions()
