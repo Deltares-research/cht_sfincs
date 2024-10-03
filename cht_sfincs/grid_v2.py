@@ -57,7 +57,7 @@ class SfincsGrid:
             print("Could not find CRS in quadtree netcdf file")    
 
     def write(self, file_name=None, version=0):
-        if file_name == None:
+        if file_name is None:
             if not self.model.input.variables.qtrfile: 
                 self.model.input.variables.qtrfile = "sfincs.nc"
             file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
@@ -204,7 +204,27 @@ class SfincsGrid:
     #        polygons = shapely.simplify(polygons, self.dx)
             self.exterior = gpd.GeoDataFrame(geometry=list(polygons), crs=self.model.crs)
         except:
-            self.exterior = gpd.GeoDataFrame()    
+            self.exterior = gpd.GeoDataFrame()
+
+        return self.exterior    
+
+    def get_extent(self, crs=None):
+        """Get extent of grid"""
+        if crs is not None:
+            # Convert coords to crs
+            transformer = Transformer.from_crs(self.model.crs,
+                                                  crs,
+                                                  always_xy=True)
+            # etc.
+            # bnds = self.data.grid.bounds
+        else:
+            bnds = self.data.grid.bounds
+
+        xmin = bnds[0]
+        xmax = bnds[2]
+        ymin = bnds[1]
+        ymax = bnds[3]
+        return [xmin, xmax], [ymin, ymax]
 
     def get_datashader_dataframe(self):
         # Create a dataframe with line elements
