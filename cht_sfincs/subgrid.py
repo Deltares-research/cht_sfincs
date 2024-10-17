@@ -48,7 +48,7 @@ class SfincsSubgridTable:
               bathymetry_sets,
               roughness_sets,
               manning_land=0.04,
-              manning_water=0.025,
+              manning_water=0.020,
               manning_level=1.0,
               nr_bins=None,
               nr_levels=10,
