@@ -58,9 +58,11 @@ class SfincsGrid:
 
     def write(self, file_name=None, version=0):
         if file_name is None:
-            if not self.model.input.variables.qtrfile: 
-                self.model.input.variables.qtrfile = "sfincs.nc"
-            file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
+            file_name = "sfincs.nc"
+        if not self.model.input.variables.qtrfile: 
+            # Not yet in input
+            self.model.input.variables.qtrfile = file_name
+        file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
         attrs = self.data.attrs
         ds = self.data.ugrid.to_dataset()
         ds.attrs = attrs
@@ -124,7 +126,7 @@ class SfincsGrid:
 
         print("Time elapsed : " + str(time.time() - start) + " s")
 
-    def set_bathymetry(self, bathymetry_sets, quiet=True):
+    def set_bathymetry(self, bathymetry_sets, depth_factor=1.0, quiet=True):
         
         from cht_bathymetry.bathymetry_database import bathymetry_database
 
@@ -164,6 +166,8 @@ class SfincsGrid:
                                                                dxmin,
                                                                self.model.crs,
                                                                bathymetry_sets)
+            zgl = zgl * depth_factor
+
             zz[cell_indices_in_level] = zgl
 
         ugrid2d = self.data.grid
