@@ -84,8 +84,8 @@ class SfincsOutput:
                     
         return df    
 
-    def read_zsmax(self, time_range=None, zsmax_file=None, output="grid"):
-    
+    def read_zsmax(self, time_range=None, zsmax_file=None, output="grid", varname="zsmax"):
+        # Returns xarray data set (not yet) or numpy array with maximum water levels (yet)    
         if not zsmax_file:
             if self.model.input.outputformat[0:3] == "net":
                 zsmax_file = os.path.join(self.model.path, "sfincs_map.nc")
@@ -93,11 +93,7 @@ class SfincsOutput:
                 zsmax_file = os.path.join(self.model.path, "zsmax.dat")
             
 
-        if self.model.input.outputformat[0:3] == "net":
-#            ddd=xr.open_dataset(zsmax_file)
-#            zsmx=ddd.zsmax.values
-#            zsmax=np.transpose(np.nanmax(ddd.zsmax.values, axis=0))
-            
+        if self.model.input.variables.outputformat[0:3] == "net":
 
             dsin = xr.open_dataset(zsmax_file)
 
@@ -115,17 +111,25 @@ class SfincsOutput:
                 if time<=time_range[1]:
                     it1 = it
 
-            if self.input.qtrfile:
-                zsmax = np.nanmax(dsin.zsmax.values[it0:it1 + 1,:], axis=0)
-            else:                
-                zsmax = np.transpose(np.nanmax(dsin.zsmax.values[it0:it1 + 1,:,:], axis=0))
+            # Find out the shape of the data
+            # If dsin[varname].shape is (nt, ny, nx) then we have a regular grid
+            # If dsin[varname].shape is (nt, n) then we have a quadtree grid
+            if len(dsin[varname].shape) == 3:
+                zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:,:], axis=0)
+            else:
+                zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:], axis=0)
+            # if self.model.input.variables.qtrfile:
+            #     zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:], axis=0)
+            # else:                
+            #     zsmax = np.transpose(np.nanmax(dsin[varname].values[it0:it1 + 1,:,:], axis=0))
+
             dsin.close()
 
             return zsmax
 
-
-
         else:
+
+            # Are we still supporting this ?
         
             ind_file = os.path.join(self.model.path, self.model.input.variables.indexfile)
     

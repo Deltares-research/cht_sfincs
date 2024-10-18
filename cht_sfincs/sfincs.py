@@ -25,7 +25,7 @@ from .snapwave import SfincsSnapWave
 from .output import SfincsOutput
 
 class SFINCS:    
-    def __init__(self, root=None, crs=None, mode="w"):
+    def __init__(self, root=None, crs=None, mode="w", read_grid_data=True):
 
         if not root:
             root = os.getcwd()
@@ -56,7 +56,7 @@ class SFINCS:
         
         if mode == "r":
             self.input.read()
-            self.read_attribute_files()
+            self.read_attribute_files(read_grid_data=read_grid_data)
 
     def read(self):
         # Reads sfincs.inp and attribute files
@@ -68,7 +68,7 @@ class SFINCS:
         self.input.write()
         self.write_attribute_files()
 
-    def read_attribute_files(self):
+    def read_attribute_files(self, read_grid_data=True):
         
         self.grid = SfincsGrid(self)
 
@@ -77,25 +77,29 @@ class SFINCS:
         else:
             self.grid.type = "regular"
 
-        if self.grid.type == "regular":
-            self.grid.build(self.input.variables.x0,
-                            self.input.variables.y0,
-                            self.input.variables.nmax,
-                            self.input.variables.mmax,
-                            self.input.variables.dx,
-                            self.input.variables.dy,
-                            self.input.variables.rotation)
-            # Read in mask, index and dep file (for quadtree the mask is stored in the quadtree file)
-            self.mask.read()
-            
-        else:  
-            # This reads in quadtree netcdf file. In case of index and mask file, it will generate the quadtree grid and save the file.
-            # The grid object contains coordinates, neighbor indices, mask, snapwave mask and bed level.
-            self.grid.read()
+        if read_grid_data: 
 
-        # Sub-grid tables
-        if self.bathy_type == "subgrid":
-            self.subgrid.read()
+            if self.grid.type == "regular":
+
+                self.grid.build(self.input.variables.x0,
+                                self.input.variables.y0,
+                                self.input.variables.nmax,
+                                self.input.variables.mmax,
+                                self.input.variables.dx,
+                                self.input.variables.dy,
+                                self.input.variables.rotation)
+
+                # Read in mask, index and dep file (for quadtree the mask is stored in the quadtree file)
+                self.mask.read()
+                
+            else:  
+                # This reads in quadtree netcdf file. In case of index and mask file, it will generate the quadtree grid and save the file.
+                # The grid object contains coordinates, neighbor indices, mask, snapwave mask and bed level.
+                self.grid.read()
+
+            # Sub-grid tables
+            if self.bathy_type == "subgrid":
+                self.subgrid.read()
 
         # Initial conditions (reads ini file)
         self.initial_conditions.read()

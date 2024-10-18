@@ -8,8 +8,11 @@ import numpy as np
 import geopandas as gpd
 import shapely
 import pandas as pd
+# from pandas.tseries.offsets import DateOffset
 from tabulate import tabulate
 from pyproj import Transformer
+from cht_utils.deltares_ini import IniStruct
+from cht_tide.tide_predict import predict
 
 class SfincsBoundaryConditions:
 
@@ -23,13 +26,13 @@ class SfincsBoundaryConditions:
         # Read in all boundary data
         self.read_boundary_points()
         self.read_boundary_conditions_time_series()
-
+        if self.model.input.variables.bcafile:
+            self.read_boundary_conditions_astro()
 
     def write(self):
         # Write all boundary data
         self.write_boundary_points()
         self.write_boundary_conditions_timeseries()
-
 
     def read_boundary_points(self):
         # Read bnd file
@@ -40,7 +43,7 @@ class SfincsBoundaryConditions:
 
         # Read the bnd file
         df = pd.read_csv(file_name, index_col=False, header=None,
-                         delim_whitespace=True, names=['x', 'y'])
+                         names=['x', 'y'], sep="\s+")
 
         gdf_list = []
         # Loop through points
@@ -49,10 +52,9 @@ class SfincsBoundaryConditions:
             x = df.x.values[ind]
             y = df.y.values[ind]
             point = shapely.geometry.Point(x, y)
-            d = {"name": name, "timeseries": pd.DataFrame(), "geometry": point}
+            d = {"name": name, "timeseries": pd.DataFrame(), "astro": pd.DataFrame(), "geometry": point}
             gdf_list.append(d)
         self.gdf = gpd.GeoDataFrame(gdf_list, crs=self.model.crs)
-
 
     def write_boundary_points(self):
         # Write bnd file
@@ -114,11 +116,10 @@ class SfincsBoundaryConditions:
         df = df.set_index("time")
             
         gdf_list = []
-        d = {"name": name, "timeseries": df, "geometry": point}
+        d = {"name": name, "timeseries": df, "astro": pd.DataFrame(),  "geometry": point}
         gdf_list.append(d)
         gdf_new = gpd.GeoDataFrame(gdf_list, crs=self.model.crs)        
         self.gdf = pd.concat([self.gdf, gdf_new], ignore_index=True)
-
 
     def delete_point(self, index):
         # Delete boundary point by index
@@ -127,10 +128,8 @@ class SfincsBoundaryConditions:
         if index<len(self.gdf.index):
             self.gdf = self.gdf.drop(index).reset_index(drop=True)
         
-
     def clear(self):
         self.gdf  = gpd.GeoDataFrame()
-
 
     def read_boundary_conditions_time_series(self):
         # Read SFINCS bzs file
@@ -160,10 +159,11 @@ class SfincsBoundaryConditions:
             point["timeseries"]["wl"] = dffile.iloc[:, ip].values
             point["timeseries"].set_index("time", inplace=True)
 
-
     def write_boundary_conditions_timeseries(self):
+
         if len(self.gdf.index)==0:
             return
+
         # First get times from the first point (times in other points should be identical)
         time = self.gdf.loc[0]["timeseries"].index
         tref = self.model.input.variables.tref
@@ -185,61 +185,50 @@ class SfincsBoundaryConditions:
         #           float_format="%.3f")
         to_fwf(df, file_name)
     
-    def read_astro_boundary_conditions(self, file_name=None):
+    def read_boundary_conditions_astro(self):
 
-        # Read SFINCS bca file
-        if not file_name:
-            if not self.input.bcafile:
-                return
-            file_name = os.path.join(self.path,
-                                     self.input.bcafile)
-            
-        if not file_name:
+        if not self.model.input.variables.bcafile:
+            return
+        if len(self.gdf.index)==0:
             return
         
-        if not os.path.exists(file_name):
-            return
+        # WL      
+        file_name = os.path.join(self.model.path, self.model.input.variables.bcafile)
 
         d = IniStruct(filename=file_name)
-        for ind, point in enumerate(self.flow_boundary_point):
-            point.astro = d.section[ind].data
+        # Loop through boundary points
+        for ip, point in self.gdf.iterrows():            
+            # Set data in row of gdf
+            self.gdf.at[ip, "astro"] = d.section[ip].data
 
     def generate_bzs_from_bca(self,
-                              file_name=None,
                               dt=600.0,
                               offset=0.0,
                               write_file=True):
-        
-        if not self.boundary_conditions:
-            print("No boundary points found!")
+
+        if len(self.gdf.index)==0:
             return
 
-        from cht_tide.tide_predict import predict
-
-        if not file_name:
-            if not self.model.input.variables.bzsfile:
-                self.model.input.variables.bzsfile = "sfincs.bzs"
-            file_name = self.model.input.variables.bzsfile
+        if not self.model.input.variables.bzsfile:
+            self.model.input.variables.bzsfile = "sfincs.bzs"
 
         times = pd.date_range(start=self.model.input.variables.tstart,
                               end=self.model.input.variables.tstop,
-                              freq=DateOffset(seconds=dt))
-                              
+                              freq=pd.tseries.offsets.DateOffset(seconds=dt))                              
 
         # Make boundary conditions based on bca file
         for icol, point in self.gdf.iterrows():
             v = predict(point.astro, times) + offset
             ts = pd.Series(v, index=times)
-            df = pd.DataFrame()     
-            df["time"] = ts
-            df["wl"] = v
+            # Convert this pandas series to a DataFrame
+            df = pd.DataFrame()
+            df["time"] = ts.index
+            df["wl"] = ts.values
             df = df.set_index("time")
             self.gdf.at[icol, "timeseries"] = df
-            # point.data = pd.Series(v, index=times)
                     
         if write_file:            
-            self.write_flow_boundary_conditions()
-
+            self.write_boundary_conditions_timeseries()
 
     def get_boundary_points_from_mask(self, min_dist=None, bnd_dist=5000.0):
 
