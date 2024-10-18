@@ -112,16 +112,12 @@ class SfincsOutput:
                     it1 = it
 
             # Find out the shape of the data
-            # If dsin[varname].shape is (nt, ny, nx) then we have a regular grid
-            # If dsin[varname].shape is (nt, n) then we have a quadtree grid
-            if len(dsin[varname].shape) == 3:
+            if "mesh2d_face_nodes" in dsin:
+                # Quadtree grid
                 zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:,:], axis=0)
             else:
+                # Regular grid
                 zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:], axis=0)
-            # if self.model.input.variables.qtrfile:
-            #     zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:], axis=0)
-            # else:                
-            #     zsmax = np.transpose(np.nanmax(dsin[varname].values[it0:it1 + 1,:,:], axis=0))
 
             dsin.close()
 
