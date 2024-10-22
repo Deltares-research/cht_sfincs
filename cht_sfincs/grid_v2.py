@@ -46,7 +46,7 @@ class SfincsGrid:
         self.data = xu.open_dataset(file_name)
         self.data.close()
         self.type = "quadtree"
-        self.nr_cells = self.data.dims['mesh2d_nFaces']
+        self.nr_cells = self.data.sizes["mesh2d_nFaces"]
         self.get_exterior()
         crd_dict = self.data["crs"].attrs
         if "projected_crs_name" in crd_dict:
@@ -58,11 +58,9 @@ class SfincsGrid:
 
     def write(self, file_name=None, version=0):
         if file_name is None:
-            file_name = "sfincs.nc"
-        if not self.model.input.variables.qtrfile: 
-            # Not yet in input
-            self.model.input.variables.qtrfile = file_name
-        file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
+            if not self.model.input.variables.qtrfile: 
+                self.model.input.variables.qtrfile = "sfincs.nc"
+            file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
         attrs = self.data.attrs
         ds = self.data.ugrid.to_dataset()
         ds.attrs = attrs
@@ -98,6 +96,9 @@ class SfincsGrid:
         self.sinrot = np.sin(rotation*np.pi/180)
         self.refinement_polygons = refinement_polygons
 
+        # Clear mask
+        self.model.mask.clear_datashader_dataframe()
+
         # Make regular grid
         self.get_regular_grid()
  
@@ -126,9 +127,15 @@ class SfincsGrid:
 
         print("Time elapsed : " + str(time.time() - start) + " s")
 
-    def set_bathymetry(self, bathymetry_sets, depth_factor=1.0, quiet=True):
+    def set_bathymetry(self, bathymetry_sets, bathymetry_database=None, quiet=True):
         
-        from cht_bathymetry.bathymetry_database import bathymetry_database
+        # from cht_bathymetry.bathymetry_database import bathymetry_database
+        # if bathymetry_database is None:
+        #     from cht_bathymetry .bathymetry_database import bathymetry_database
+
+        if bathymetry_database is None:
+            print("Error! No bathymetry database provided!")
+            return
 
         if not quiet:
             print("Getting bathymetry data ...")
@@ -166,8 +173,6 @@ class SfincsGrid:
                                                                dxmin,
                                                                self.model.crs,
                                                                bathymetry_sets)
-            zgl = zgl * depth_factor
-
             zz[cell_indices_in_level] = zgl
 
         ugrid2d = self.data.grid
@@ -208,27 +213,21 @@ class SfincsGrid:
     #        polygons = shapely.simplify(polygons, self.dx)
             self.exterior = gpd.GeoDataFrame(geometry=list(polygons), crs=self.model.crs)
         except:
-            self.exterior = gpd.GeoDataFrame()
+            self.exterior = gpd.GeoDataFrame()    
 
-        return self.exterior    
-
-    def get_extent(self, crs=None):
-        """Get extent of grid"""
-        if crs is not None:
-            # Convert coords to crs
-            transformer = Transformer.from_crs(self.model.crs,
-                                                  crs,
-                                                  always_xy=True)
-            # etc.
-            # bnds = self.data.grid.bounds
-        else:
-            bnds = self.data.grid.bounds
-
-        xmin = bnds[0]
-        xmax = bnds[2]
-        ymin = bnds[1]
-        ymax = bnds[3]
-        return [xmin, xmax], [ymin, ymax]
+    def bounds(self, crs=None, buffer=0.0):
+        """Returns list with bounds (lon1, lat1, lon2, lat2), with buffer (default 0.0) and in any CRS (default : same CRS as model)"""
+        if crs is None:
+            crs = self.crs
+        # Convert exterior gdf to WGS 84
+        lst = self.exterior.to_crs(crs=crs).total_bounds.tolist()
+        dx = lst[2] - lst[0]
+        dy = lst[3] - lst[1]
+        lst[0] = lst[0] - buffer * dx
+        lst[1] = lst[1] - buffer * dy
+        lst[2] = lst[2] + buffer * dx
+        lst[3] = lst[3] + buffer * dy
+        return lst
 
     def get_datashader_dataframe(self):
         # Create a dataframe with line elements
@@ -279,9 +278,9 @@ class SfincsGrid:
     # def make_index_tiles(self, path, zoom_range=None, format=0):
         
     #     import math
-    #     from cht_tiling.tiling import deg2num
-    #     from cht_tiling.tiling import num2deg
-    #     import cht_utils.fileops as fo
+    #     from cht.tiling.tiling import deg2num
+    #     from cht.tiling.tiling import num2deg
+    #     import cht.misc.fileops as fo
         
     #     npix = 256
         

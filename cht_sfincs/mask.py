@@ -28,6 +28,8 @@ from datashader.utils import export_image
 class SfincsMask:
     def __init__(self, model):
         self.model       = model
+        # For plotting map overlay (not this is the only data that is stored in the object!)
+        self.datashader_dataframe = pd.DataFrame()
 
     def build(self,
                  zmin=99999.0,
@@ -44,6 +46,7 @@ class SfincsMask:
                  open_boundary_zmax= 99999.0,
                  outflow_boundary_zmin=-99999.0,
                  outflow_boundary_zmax= 99999.0,
+                 update_datashader_dataframe=False,
                  quiet=True):
 
         if not quiet:
@@ -369,6 +372,10 @@ class SfincsMask:
         ugrid2d = self.model.grid.data.grid
         self.model.grid.data["mask"] = xu.UgridDataArray(xr.DataArray(data=mask, dims=[ugrid2d.face_dimension]), ugrid2d)
 
+        if update_datashader_dataframe:
+            # For use in DelftDashboard
+            self.get_datashader_dataframe()
+
     # def read(self, file_name=None):
     #     pass
 
@@ -550,6 +557,91 @@ class SfincsMask:
         else:
             return False
 
+    def get_datashader_dataframe(self):
+        # Create a dataframe with points elements
+        # Coordinates of cell centers
+        x = self.model.grid.data.grid.face_coordinates[:,0]
+        y = self.model.grid.data.grid.face_coordinates[:,1]
+        mask = self.model.grid.data["mask"].values[:]
+        # Get rid of cells with mask = 0
+        iok = np.where(mask>0)
+        x = x[iok]
+        y = y[iok]
+        mask = mask[iok]
+        if np.size(x) == 0:
+            # Return empty dataframe
+            self.datashader_dataframe = pd.DataFrame()
+            return
+        # Transform all to 3857 (web mercator)
+        transformer = Transformer.from_crs(self.model.crs,
+                                            3857,
+                                            always_xy=True)
+        x, y = transformer.transform(x, y)
+
+        self.datashader_dataframe = pd.DataFrame(dict(x=x, y=y, mask=mask))
+
+    def clear_datashader_dataframe(self):
+        # Called in model.grid.build method
+        self.datashader_dataframe = pd.DataFrame()
+
+    def map_overlay(self,
+                    file_name,
+                    xlim=None,
+                    ylim=None,
+                    active_color="yellow",
+                    boundary_color="red",
+                    outflow_color="green",
+                    px=2,
+                    width=800):
+
+        if self.model.grid.data is None:
+            # No mask points (yet)
+            return False
+        try:
+
+            # Mask is empty, return False    
+            if self.datashader_dataframe.empty:
+                return False
+
+            transformer = Transformer.from_crs(4326,
+                                        3857,
+                                        always_xy=True)
+            xl0, yl0 = transformer.transform(xlim[0], ylim[0])
+            xl1, yl1 = transformer.transform(xlim[1], ylim[1])
+            xlim = [xl0, xl1]
+            ylim = [yl0, yl1]
+            ratio = (ylim[1] - ylim[0]) / (xlim[1] - xlim[0])
+            height = int(width * ratio)
+
+            cvs = ds.Canvas(x_range=xlim, y_range=ylim, plot_height=height, plot_width=width)
+
+            # With this approach we can still see colors of mask 2 and 3 even if they are not there
+            # color_key = {1: active_color, 2: boundary_color, 3: outflow_color}
+            # agg = cvs.points(self.datashader_dataframe, 'x', 'y', ds.min("mask"))
+            # # img = tf.shade(tf.spread(agg, px=px), cmap=active_color)
+            # img = tf.shade(tf.spread(agg, px=px), color_key=color_key, rescale_discrete_levels=True)
+            # img = tf.stack(img, tf.shade(agg, cmap=["black"]))
+
+            # Instead, we can create separate images for each mask and stack them
+            dfact = self.datashader_dataframe[self.datashader_dataframe["mask"]==1]
+            dfbnd = self.datashader_dataframe[self.datashader_dataframe["mask"]==2]
+            dfout = self.datashader_dataframe[self.datashader_dataframe["mask"]==3]
+            img_a = tf.shade(tf.spread(cvs.points(dfact, 'x', 'y'), px=px), cmap=active_color)
+            img_b = tf.shade(tf.spread(cvs.points(dfbnd, 'x', 'y'), px=px), cmap=boundary_color)
+            img_o = tf.shade(tf.spread(cvs.points(dfout, 'x', 'y'), px=px), cmap=outflow_color)
+            img   = tf.stack(img_a, img_b, img_o)
+
+            path = os.path.dirname(file_name)
+            if not path:
+                path = os.getcwd()
+            name = os.path.basename(file_name)
+            name = os.path.splitext(name)[0]
+            export_image(img, name, export_path=path)
+            return True
+
+        except Exception as e:
+            print(e)
+            return False
 
 def get_neighbors_in_larger_cell(n, m):    
     nnbr = [-1, -1, -1, -1]

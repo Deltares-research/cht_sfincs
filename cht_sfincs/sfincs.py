@@ -174,3 +174,4 @@ class SFINCS:
         self.weirs                = SfincsWeirs(self)
         self.wave_makers          = SfincsWaveMakers(self)
         self.snapwave             = SfincsSnapWave(self)
+

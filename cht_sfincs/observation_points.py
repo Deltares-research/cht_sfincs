@@ -22,8 +22,11 @@ class SfincsObservationPoints:
         file_name = os.path.join(self.model.path, self.model.input.variables.obsfile)
 
         # Read the bnd file
-        df = pd.read_csv(file_name, index_col=False, header=None,
-             delim_whitespace=True, names=['x', 'y', 'name'])
+        df = pd.read_csv(file_name,
+                         index_col=False,
+                         header=None,
+                         sep="\s+",
+                         names=['x', 'y', 'name'])
 
         gdf_list = []
         # Loop through points
