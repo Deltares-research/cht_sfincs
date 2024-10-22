@@ -10,7 +10,7 @@ import os
 import xarray as xr
 
 from cht_utils.misc_tools import interp2
-from cht_bathymetry.bathymetry_database import bathymetry_database
+# from cht_bathymetry.bathymetry_database import bathymetry_database
     
 class SfincsSubgridTable:
 
@@ -58,6 +58,7 @@ class SfincsSubgridTable:
               huthresh=0.01,
               zmin=-99999.0,
               file_name="sfincs.sbg",
+              bathymetry_database=None,
               quiet=False,
               progress_bar=None):  
 
