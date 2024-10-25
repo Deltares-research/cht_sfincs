@@ -25,7 +25,7 @@ class Variables:
         self.tref = tnow
         self.tstart = tnow
         self.tstop = tnow + datetime.timedelta(days=1)
-        self.tspinup = 60.0
+        self.tspinup = 3600.0
         self.t0out = None
         self.dtmapout = 3600.0
         self.dthisout = 600.0
@@ -35,7 +35,8 @@ class Variables:
         self.dtwnd = 1800.0
         self.alpha = 0.5
         self.theta = 1.0
-        self.nuvisc = -999.0
+        self.viscosity = False
+        self.nuvisc = 0.01
         self.huthresh = 0.01
         self.manning = 0.04
         self.manning_land = 0.04

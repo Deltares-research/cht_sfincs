@@ -17,7 +17,7 @@ from .initial_conditions import SfincsInitialConditions
 from .boundary_conditions import SfincsBoundaryConditions
 from .observation_points import SfincsObservationPoints
 from .cross_sections import SfincsCrossSections
-from .point_sources import SfincsPointSources
+from .discharge_points import SfincsDischargePoints
 from .thin_dams import SfincsThinDams
 from .weirs import SfincsWeirs
 from .wave_makers import SfincsWaveMakers
@@ -48,7 +48,7 @@ class SFINCS:
         self.wave_makers              = SfincsWaveMakers(self)
         self.snapwave                 = SfincsSnapWave(self)
         self.cross_sections           = SfincsCrossSections(self)
-        self.point_sources            = SfincsPointSources(self)
+        self.discharge_points         = SfincsDischargePoints(self)
         self.thin_dams                = SfincsThinDams(self)
         self.weirs                    = SfincsWeirs(self)
         self.output                   = SfincsOutput(self)
@@ -120,7 +120,7 @@ class SFINCS:
         self.weirs.read()
 
         # Sources and sinks (reads src and dis file)
-        self.point_sources.read()
+        self.discharge_points.read()
 
         # Infiltration
         # self.infiltration.read()
@@ -150,7 +150,7 @@ class SFINCS:
         # Weirs
         self.thin_dams.write()
         # Sources and sinks
-        self.point_sources.write()
+        self.discharge_points.write()
         # Infiltration
         self.infiltration.write()
         # SnapWave

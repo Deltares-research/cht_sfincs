@@ -25,7 +25,7 @@ class SfincsBoundaryConditions:
     def read(self):
         # Read in all boundary data
         self.read_boundary_points()
-        self.read_boundary_conditions_time_series()
+        self.read_boundary_conditions_timeseries()
         if self.model.input.variables.bcafile:
             self.read_boundary_conditions_astro()
 
@@ -35,6 +35,7 @@ class SfincsBoundaryConditions:
         self.write_boundary_conditions_timeseries()
 
     def read_boundary_points(self):
+
         # Read bnd file
         if not self.model.input.variables.bndfile:
             return
@@ -91,11 +92,6 @@ class SfincsBoundaryConditions:
         name = str(nrp + 1).zfill(4)
         point = shapely.geometry.Point(x, y)
         df = pd.DataFrame()     
-       
-        if not self.model.input.variables.bndfile:
-            self.model.input.variables.bndfile = "sfincs.bnd"
-        if not self.model.input.variables.bzsfile:
-            self.model.input.variables.bzsfile = "sfincs.bzs"
                     
         new = True
         if len(self.gdf.index)>0:
@@ -131,7 +127,7 @@ class SfincsBoundaryConditions:
     def clear(self):
         self.gdf  = gpd.GeoDataFrame()
 
-    def read_boundary_conditions_time_series(self):
+    def read_boundary_conditions_timeseries(self):
         # Read SFINCS bzs file
 
         if not self.model.input.variables.bzsfile:
@@ -162,6 +158,11 @@ class SfincsBoundaryConditions:
     def write_boundary_conditions_timeseries(self):
 
         if len(self.gdf.index)==0:
+            # No boundary points
+            return
+        
+        if len(self.gdf.loc[0]["timeseries"].index) == 0:
+            # No time series data
             return
 
         # First get times from the first point (times in other points should be identical)
@@ -187,12 +188,16 @@ class SfincsBoundaryConditions:
     
     def read_boundary_conditions_astro(self):
 
-        if not self.model.input.variables.bcafile:
-            return
         if len(self.gdf.index)==0:
+            # No boundary points
             return
         
-        # WL      
+        if len(self.gdf.loc[0]["timeseries"].index) == 0:
+            # No time series data
+            return
+
+        if not self.model.input.variables.bcafile:
+            self.model.input.variables.bcafile = "sfincs.bzs"            
         file_name = os.path.join(self.model.path, self.model.input.variables.bcafile)
 
         d = IniStruct(filename=file_name)
@@ -200,6 +205,39 @@ class SfincsBoundaryConditions:
         for ip, point in self.gdf.iterrows():            
             # Set data in row of gdf
             self.gdf.at[ip, "astro"] = d.section[ip].data
+
+    def write_boundary_conditions_astro(self):
+
+        if not self.model.input.variables.bcafile:
+            # No file name
+            return
+
+        if len(self.gdf.index)==0:
+            # No points
+            return
+        
+        # WL      
+        filename = os.path.join(self.model.path, self.model.input.variables.bcafile)
+
+        fid = open(filename, "w")
+
+        for ip, point in self.gdf.iterrows():
+            astro = point["astro"]
+            # name is like "sfincs_0001"
+            name = f"sfincs_{ip+1:04d}"
+            fid.write(f"[forcing]\n")
+            fid.write(f"Name                            = {name}\n")
+            fid.write(f"Function                        = astronomic\n")
+            fid.write(f"Quantity                        = astronomic component\n")
+            fid.write(f"Unit                            = -\n")
+            fid.write(f"Quantity                        = waterlevelbnd amplitude\n")
+            fid.write(f"Unit                            = m\n")
+            fid.write(f"Quantity                        = waterlevelbnd phase\n")
+            fid.write(f"Unit                            = deg\n")
+            for constituent, row in astro.iterrows():
+                fid.write(f"{constituent:6s}{row['amplitude']:10.5f}{row['phase']:10.2f}\n")
+            fid.write(f"\n")
+        fid.close()
 
     def generate_bzs_from_bca(self,
                               dt=600.0,
@@ -339,23 +377,61 @@ class SfincsBoundaryConditions:
 
         self.gdf = gpd.GeoDataFrame(gdf_list, crs=self.model.crs)
 
-    def set_timeseries_uniform(self, wl):
-        # Applies uniform time series boundary conditions for each point
-        time = [self.model.input.variables.tstart, self.model.input.variables.tstop]
-        nt = len(time)
-        wl = [wl] * nt
+    def set_timeseries(self,
+                       shape="constant",
+                       timestep=600.0,
+                       offset=0.0,
+                       amplitude=1.0,
+                       phase=0.0,
+                       period=43200.0,
+                       peak=1.0,
+                       tpeak=86400.0,
+                       duration=43200.0):
+
+        # Applies time series boundary conditions for each point
+        # Create numpy datetime64 array for time series with python datetime.datetime objects
+
+        if shape == "astronomical":
+            # Use existing method
+            self.generate_bzs_from_bca(dt=timestep, offset=offset, write_file=False)
+            return
+
+        t0 = np.datetime64(self.model.input.variables.tstart)
+        t1 = np.datetime64(self.model.input.variables.tstop)
+        if shape == "constant":
+            dt = np.timedelta64(int((t1 - t0).astype(float) / 1e6), 's')
+        else:
+            dt = np.timedelta64(int(timestep), 's')
+        time = np.arange(t0, t1 + dt, dt)
+        dtsec = dt.astype(float)  
+        # Convert time to seconds since tref
+        tsec = (time - np.datetime64(self.model.input.variables.tref)).astype('timedelta64[s]').astype(float)
+        nt = len(tsec)
+        if shape == "constant":
+            wl = [offset] * nt
+        elif shape == "sine":
+            wl = offset + amplitude * np.sin(2 * np.pi * tsec / period + phase * np.pi / 180)
+        elif shape == "gaussian":
+            wl = offset + peak * np.exp(-0.5 * ((tsec - tpeak) / duration)**2)
+        elif shape == "astronomical":
+            # Not implemented
+            return
+
+        times = pd.date_range(start=self.model.input.variables.tstart,
+                              end=self.model.input.variables.tstop,
+                              freq=pd.tseries.offsets.DateOffset(seconds=dtsec))                              
+
         for index, point in self.gdf.iterrows():
             df = pd.DataFrame()     
-            df["time"] = time
+            df["time"] = times
             df["wl"] = wl
             df = df.set_index("time")
             self.gdf.at[index, "timeseries"] = df
 
-
 def read_timeseries_file(file_name, ref_date):
     # Returns a dataframe with time series for each of the columns
     df = pd.read_csv(file_name, index_col=0, header=None,
-                     delim_whitespace=True)
+                     sep="\s+")
     ts = ref_date + pd.to_timedelta(df.index, unit="s")
     df.index = ts
     return df
