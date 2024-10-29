@@ -453,7 +453,6 @@ class SfincsSubgridTable:
                                     self.ds["uv_navg"][iuv]   = navg
 
                     if progress_bar:
-                        print(ibt)
                         progress_bar.set_value(ibt)
                         if progress_bar.was_canceled():
                             return
