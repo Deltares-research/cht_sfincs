@@ -121,7 +121,7 @@ class SfincsGrid:
         # Create xugrid dataset 
         self.to_xugrid()
         
-#        self.get_exterior()
+        self.get_exterior()
 
         self.clear_temporary_arrays()
 

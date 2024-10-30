@@ -138,12 +138,12 @@ class SfincsInput:
         lines = fid.readlines()
         fid.close()
         for line in lines:
-            str = line.split("=")
-            if len(str) == 1:
+            strings = line.split("=")
+            if len(strings) == 1:
                 # Empty line
                 continue
-            name = str[0].strip()
-            val = str[1].strip()
+            name = strings[0].strip()
+            val = strings[1].strip()
             try:
                 # First try to convert to int
                 val = int(val)
@@ -170,7 +170,7 @@ class SfincsInput:
                     val = None
 
             if hasattr(self.variables, ""):
-                if type(getattr(self.variables, name)) == bool:
+                if type(getattr(self.variables, name)) is bool:
                     if val == 0:
                         val = False       
                     else:
@@ -186,6 +186,11 @@ class SfincsInput:
             self.model.bathy_type = "subgrid"
         else:
             self.model.bathy_type = "regular"
+
+        if isinstance(self.variables.cdwnd, str):
+            self.variables.cdwnd = [float(x) for x in self.variables.cdwnd.split()]
+        if isinstance(self.variables.cdval, str):
+            self.variables.cdval = [float(x) for x in self.variables.cdval.split()]
 
     def write(self):
         # Write sfincs.inp
