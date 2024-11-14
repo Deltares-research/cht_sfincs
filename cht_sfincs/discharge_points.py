@@ -55,10 +55,12 @@ class SfincsDischargePoints:
         tref = self.model.input.variables.tref
 
         dffile = read_timeseries_file(filename, tref)
+        times = dffile.index
 
         # Loop through boundary points
         for ip, point in self.gdf.iterrows():
-            point["timeseries"]["time"] = dffile.index
+            point["timeseries"] = pd.DataFrame()
+            point["timeseries"]["time"] = times
             point["timeseries"]["q"] = dffile.iloc[:, ip].values
             point["timeseries"].set_index("time", inplace=True)
 

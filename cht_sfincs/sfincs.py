@@ -25,6 +25,7 @@ from .snapwave import SfincsSnapWave
 from .output import SfincsOutput
 
 class SFINCS:    
+
     def __init__(self, root=None, crs=None, mode="w", read_grid_data=True):
 
         if not root:
@@ -151,8 +152,8 @@ class SFINCS:
         self.thin_dams.write()
         # Sources and sinks
         self.discharge_points.write()
-        # Infiltration
-        self.infiltration.write()
+        # # Infiltration
+        # self.infiltration.write()
         # SnapWave
         self.snapwave.write()
         # Wave makers

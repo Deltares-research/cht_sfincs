@@ -39,7 +39,7 @@ class SfincsGrid:
         self.exterior = gpd.GeoDataFrame()
 
     def read(self, file_name=None):
-        if file_name == None:
+        if file_name is None:
             if not self.model.input.variables.qtrfile: 
                 self.model.input.variables.qtrfile = "sfincs.nc"
             file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
@@ -65,6 +65,7 @@ class SfincsGrid:
         ds = self.data.ugrid.to_dataset()
         ds.attrs = attrs
         ds.to_netcdf(file_name)
+        ds.close()
 
     def build(self,
               x0,
