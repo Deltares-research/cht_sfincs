@@ -192,12 +192,12 @@ class SfincsBoundaryConditions:
             # No boundary points
             return
         
-        if len(self.gdf.loc[0]["timeseries"].index) == 0:
-            # No time series data
-            return
+        # if len(self.gdf.loc[0]["timeseries"].index) == 0:
+        #     # No time series data
+        #     return
 
         if not self.model.input.variables.bcafile:
-            self.model.input.variables.bcafile = "sfincs.bzs"            
+            self.model.input.variables.bcafile = "sfincs.bca"            
         file_name = os.path.join(self.model.path, self.model.input.variables.bcafile)
 
         d = IniStruct(filename=file_name)
