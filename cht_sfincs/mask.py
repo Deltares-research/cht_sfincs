@@ -626,9 +626,9 @@ class SfincsMask:
             dfact = self.datashader_dataframe[self.datashader_dataframe["mask"]==1]
             dfbnd = self.datashader_dataframe[self.datashader_dataframe["mask"]==2]
             dfout = self.datashader_dataframe[self.datashader_dataframe["mask"]==3]
-            img_a = tf.shade(tf.spread(cvs.points(dfact, 'x', 'y'), px=px), cmap=active_color)
-            img_b = tf.shade(tf.spread(cvs.points(dfbnd, 'x', 'y'), px=px), cmap=boundary_color)
-            img_o = tf.shade(tf.spread(cvs.points(dfout, 'x', 'y'), px=px), cmap=outflow_color)
+            img_a = tf.shade(tf.spread(cvs.points(dfact, 'x', 'y', ds.any()), px=px), cmap=active_color)
+            img_b = tf.shade(tf.spread(cvs.points(dfbnd, 'x', 'y', ds.any()), px=px), cmap=boundary_color)
+            img_o = tf.shade(tf.spread(cvs.points(dfout, 'x', 'y', ds.any()), px=px), cmap=outflow_color)
             img   = tf.stack(img_a, img_b, img_o)
 
             path = os.path.dirname(file_name)

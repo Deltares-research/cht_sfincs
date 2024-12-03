@@ -299,7 +299,7 @@ class SfincsBoundaryConditions:
                 # All boundary grid points have been used. We can stop now.
                 break
 
-            # Find first of the unused points
+            # Find first the unused points
             i1 = np.where(used == False)[0][0]
 
             # Set this point to used
@@ -309,19 +309,39 @@ class SfincsBoundaryConditions:
 
             while True:
                 # Started new polyline
-                dst = np.sqrt((xp - xp[i1])**2 + (yp - yp[i1])**2)
-                dst[polyline] = np.nan
+                # Compute distances to all points that have not been used
+                xpunused = xp[~used]
+                ypunused = yp[~used]
+                unused_indices = np.where(~used)[0]
+                dst = np.sqrt((xpunused - xp[i1])**2 + (ypunused - yp[i1])**2)
                 if np.all(np.isnan(dst)):
                     break
                 inear = np.nanargmin(dst)
+                inearall = unused_indices[inear]
                 if dst[inear] < min_dist:
                     # Found next point along polyline
-                    polyline.append(inear)
-                    used[inear] = True
-                    i1 = inear
+                    polyline.append(inearall)
+                    used[inearall] = True
+                    i1 = inearall
                 else:
                     # Last point found
-                    break    
+                    break
+                # dst = np.sqrt((xp - xp[i1])**2 + (yp - yp[i1])**2)                                
+                # dst[polyline] = np.nan
+                # if np.all(np.isnan(dst)):
+                #     break
+                # inear = np.nanargmin(dst)
+                # if used[inear]:
+                #     # Last point found
+                #     break
+                # elif dst[inear] < min_dist:
+                #     # Found next point along polyline
+                #     polyline.append(inear)
+                #     used[inear] = True
+                #     i1 = inear
+                # else:
+                #     # Last point found
+                #     break    
 
             i1 = polyline[0]
             while True:
@@ -329,10 +349,30 @@ class SfincsBoundaryConditions:
                     # All boundary grid points have been used. We can stop now.
                     break
                 # Now we go in the other direction            
+                xpunused = xp[~used]
+                ypunused = yp[~used]
+                unused_indices = np.where(~used)[0]
+                dst = np.sqrt((xpunused - xp[i1])**2 + (ypunused - yp[i1])**2)
+                if np.all(np.isnan(dst)):
+                    break
+                inear = np.nanargmin(dst)
+                inearall = unused_indices[inear]
+                if dst[inear] < min_dist:
+                    # Found next point along polyline
+                    polyline.insert(0, inearall)
+                    used[inearall] = True
+                    i1 = inearall
+                else:
+                    # Last point found
+                    break
+
                 dst = np.sqrt((xp - xp[i1])**2 + (yp - yp[i1])**2)
                 dst[polyline] = np.nan
                 inear = np.nanargmin(dst)
-                if dst[inear] < min_dist:
+                if used[inear]:
+                    # Last point found
+                    break
+                elif dst[inear] < min_dist:
                     # Found next point along polyline
                     polyline.insert(0, inear)
                     used[inear] = True

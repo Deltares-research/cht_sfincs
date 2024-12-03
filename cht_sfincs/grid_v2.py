@@ -75,7 +75,9 @@ class SfincsGrid:
               dx,
               dy,
               rotation,
-              refinement_polygons=None):
+              refinement_polygons=None,
+              bathymetry_sets=None,
+              bathymetry_database=None):
 
         print("Building mesh ...")
 
@@ -96,6 +98,8 @@ class SfincsGrid:
         self.cosrot = np.cos(rotation*np.pi/180)
         self.sinrot = np.sin(rotation*np.pi/180)
         self.refinement_polygons = refinement_polygons
+        self.bathymetry_sets = bathymetry_sets
+        self.bathymetry_database = bathymetry_database
 
         # Clear mask
         self.model.mask.clear_datashader_dataframe()
@@ -143,8 +147,8 @@ class SfincsGrid:
 
         nlev = self.nr_refinement_levels
         
-        # Check if coordinates already exists
         xy = self.data.grid.face_coordinates
+
         zz = np.full(self.nr_cells, np.nan)
                         
         # Loop through all levels
@@ -164,9 +168,10 @@ class SfincsGrid:
                   
             xz  = xy[cell_indices_in_level, 0]
             yz  = xy[cell_indices_in_level, 1]
-            dxmin = self.dx/2**ilev
+            dxmin = self.dx / 2**ilev
 
-            if self.data.grid.crs.is_geographic:
+            # if self.data.grid.crs.is_geographic:
+            if self.model.crs.is_geographic:
                 dxmin = dxmin * 111000.0
 
             zgl = bathymetry_database.get_bathymetry_on_points(xz,
@@ -174,11 +179,58 @@ class SfincsGrid:
                                                                dxmin,
                                                                self.model.crs,
                                                                bathymetry_sets)
+
             zz[cell_indices_in_level] = zgl
 
         ugrid2d = self.data.grid
         self.data["z"] = xu.UgridDataArray(xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d)
 
+    def get_bathymetry_min_max(self, ind_ref, ilev, bathymetry_sets, bathymetry_database=None, quiet=True):
+        """"Used to determine min and max bathymetry of a cell (used for refinement)"""
+        
+        if bathymetry_database is None:
+            print("Error! No bathymetry database provided!")
+            return
+
+        if not quiet:
+            print("Getting bathymetry data ...")
+
+        dx = self.dx / 2**ilev
+        dy = self.dy / 2**ilev
+        xz = self.x0 + self.cosrot * (self.m[ind_ref] + 0.5) * dx - self.sinrot * (self.n[ind_ref] + 0.5) * dy
+        yz = self.y0 + self.sinrot * (self.m[ind_ref] + 0.5) * dx + self.cosrot * (self.n[ind_ref] + 0.5) * dy
+
+        # Compute the four corner coordinates of the cell, given that the cosine of the rotation is cosrot and the sine is sinrot and the cell center is xz, yz
+        xcor = np.zeros((4, np.size(xz)))
+        ycor = np.zeros((4, np.size(xz)))
+        xcor[0, :] = xz - 0.5 * self.cosrot * dx - 0.5 * self.sinrot * dy
+        ycor[0, :] = yz - 0.5 * self.sinrot * dx + 0.5 * self.cosrot * dy
+        xcor[1, :] = xz + 0.5 * self.cosrot * dx - 0.5 * self.sinrot * dy
+        ycor[1, :] = yz + 0.5 * self.sinrot * dx + 0.5 * self.cosrot * dy
+        xcor[2, :] = xz + 0.5 * self.cosrot * dx + 0.5 * self.sinrot * dy
+        ycor[2, :] = yz + 0.5 * self.sinrot * dx - 0.5 * self.cosrot * dy
+        xcor[3, :] = xz - 0.5 * self.cosrot * dx + 0.5 * self.sinrot * dy
+        ycor[3, :] = yz - 0.5 * self.sinrot * dx - 0.5 * self.cosrot * dy 
+
+        if self.model.crs.is_geographic:
+            dx = dx * 111000.0
+
+        # Now loop through the 4 corners and get the minimum and maximum bathymetry
+        for i in range(4):
+            zgl = bathymetry_database.get_bathymetry_on_points(xcor[i, :],
+                                                               ycor[i, :],
+                                                               dx,
+                                                               self.model.crs,
+                                                               bathymetry_sets)
+            if i == 0:
+                zmin = zgl
+                zmax = zgl
+            else:
+                zmin = np.minimum(zmin, zgl)
+                zmax = np.maximum(zmax, zgl)    
+
+        return zmin, zmax
+    
     def snap_to_grid(self, polyline, max_snap_distance=1.0):
         if len(polyline) == 0:
             return gpd.GeoDataFrame()
@@ -438,6 +490,14 @@ class SfincsGrid:
         for irow, row in self.refinement_polygons.iterrows():
             iref = row["refinement_level"]
             polygon = {"geometry": row["geometry"], "refinement_level": iref}
+            if "zmin" in row:
+                polygon["zmin"] = row["zmin"]
+            else:
+                polygon["zmin"] = -np.inf
+            if "zmax" in row:
+                polygon["zmax"] = row["zmax"]
+            else:
+                polygon["zmax"] = np.inf
             self.ref_pols.append(polygon)
 
         # Loop through refinement polygons and start refining
@@ -531,13 +591,24 @@ class SfincsGrid:
             # Index of cells to refine
             ind_ref += self.ifirst[ilev]
 
+            # But only where elevation is between zmin and zmax
+            if self.bathymetry_sets is not None and (polygon["zmin"] > -20000.0 or polygon["zmax"] < 20000.0):
+                # self.to_xugrid()
+                # self.compute_cell_center_coordinates()
+                zmin, zmax = self.get_bathymetry_min_max(ind_ref, ilev, self.bathymetry_sets, self.bathymetry_database)
+                # z = self.data["z"][ind_ref]
+                ind_ref = ind_ref[np.logical_and(zmax > polygon["zmin"], zmin < polygon["zmax"] )]
+
+            if not np.any(ind_ref):
+                continue
+
             self.refine_cells(ind_ref, ilev)
 
     def refine_cells(self, ind_ref, ilev):
         # Refine cells with index ind_ref
 
         # First find lower-level neighbors (these will be refined in the next iteration)
-        if ilev>0:
+        if ilev > 0:
             ind_nbr = self.find_lower_level_neighbors(ind_ref, ilev)
         else:
             ind_nbr = np.empty(0, dtype=int)    
@@ -566,7 +637,10 @@ class SfincsGrid:
         self.n = np.delete(self.n, ind_ref)
         self.m = np.delete(self.m, ind_ref)
         self.level = np.delete(self.level, ind_ref)        
+
         self.nr_cells = len(self.n)
+        self.initialize_data_arrays()
+
         # Update nr_refinement_levels at max of ilev + 2 and self.nr_refinement_levels
         self.nr_refinement_levels = np.maximum(self.nr_refinement_levels, ilev + 2)
         # Reorder cells
