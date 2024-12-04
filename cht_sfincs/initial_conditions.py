@@ -22,6 +22,8 @@ class SfincsInitialConditions:
         # Interpolate the data to the mesh
         # ds is an xarray dataset
         # Get CRS from dataset
+        if self.model.grid.data is None:
+            self.model.grid.read()
         xy = self.model.grid.data.grid.face_coordinates
         # Transfrom model coordinates to dataset coordinates
         transformer = Transformer.from_proj(self.model.crs, ds.rio.crs)

@@ -57,11 +57,15 @@ class SFINCS:
         
         if mode == "r":
             self.input.read()
+            if self.input.variables.epsg is not None:
+                self.crs = CRS.from_epsg(self.input.variables.epsg)
             self.read_attribute_files(read_grid_data=read_grid_data)
 
     def read(self):
         # Reads sfincs.inp and attribute files
         self.input.read()
+        if self.input.variables.epsg is not None:
+            self.crs = CRS.from_epsg(self.input.variables.epsg)
         self.read_attribute_files()
 
     def write(self):

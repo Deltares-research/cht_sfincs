@@ -7,6 +7,7 @@ Created on Sat May 15 08:08:40 2021
 import os
 import datetime
 import copy
+# from pyproj import CRS
 
 class Variables:
     def __init__(self):
@@ -57,6 +58,7 @@ class Variables:
         self.advlim = 9999.9
         self.stopdepth = 1000.0
         self.crsgeo = False
+        self.epsg = None
 
         self.sbgfile = None
         self.depfile = None
@@ -168,6 +170,9 @@ class SfincsInput:
                     val = datetime.datetime.strptime(val.rstrip(), "%Y%m%d %H%M%S")
                 except:
                     val = None
+
+            # if name == "epsg":
+            #     self.model.crs = CRS.from_epsg(val)
 
             if hasattr(self.variables, ""):
                 if type(getattr(self.variables, name)) is bool:
