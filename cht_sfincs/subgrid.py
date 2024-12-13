@@ -901,14 +901,14 @@ def subgrid_v_table(elevation, dx, dy, nlevels, zvolmin, max_gradient):
 
     # Cell area
     a = np.size(elevation)*dx*dy
-    
-    # Set minimum elevation to -20 (needed with single precision), and sort 
-    ele_sort = np.sort(np.maximum(elevation, zvolmin).flatten())
-    
-    # Make sure each consecutive point is larger than previous
-    for j in range(1, np.size(ele_sort)):
-        if ele_sort[j]<=ele_sort[j - 1]:
-            ele_sort[j] += 1.0e-6
+
+    # Create ele_sort and limit to zvolmin (-20.0, needed with single precision) and zvolmax
+    zvolmax = 100000.0
+    ele_sort = np.minimum(np.maximum(elevation, zvolmin), zvolmax).flatten()
+    # Add tiny random number to each elevation to avoid equal values
+    ele_sort += 1.0e-6*np.random.rand(np.size(ele_sort)) - 0.5e-6
+    # And sort
+    ele_sort = np.sort(ele_sort)
         
     depth = ele_sort - ele_sort.min()
 
@@ -929,6 +929,7 @@ def subgrid_v_table(elevation, dx, dy, nlevels, zvolmin, max_gradient):
         z[idx + 1] = z[idx] + max_gradient*(dvol/a)
         dzdh = get_dzdh(z, V, a)
         n += 1
+
     return z, V, elevation.min(), z.max(), ele_sort.mean()
 
 # @njit
@@ -952,6 +953,10 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh):
     ffit : float, fitting coefficient [-]
     zz   : np.ndarray (nlevels) elevation of vertical levels [m]
     """
+
+    # zvolmin = -20.0
+    # zvolmax = 20.0
+    # elevation = np.minimum(np.maximum(elevation, zvolmin), zvolmax)
 
     havg = np.zeros(nlevels)
     nrep = np.zeros(nlevels)

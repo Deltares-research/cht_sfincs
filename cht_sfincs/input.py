@@ -59,6 +59,7 @@ class Variables:
         self.stopdepth = 1000.0
         self.crsgeo = False
         self.epsg = None
+        self.wiggle_suppression = False
 
         self.sbgfile = None
         self.depfile = None
@@ -171,15 +172,19 @@ class SfincsInput:
                 except:
                     val = None
 
-            # if name == "epsg":
-            #     self.model.crs = CRS.from_epsg(val)
+            if type(getattr(self.variables, name)) is bool:
+                if val == 0:
+                    val = False       
+                elif val == 1:
+                    val = True
+                elif val[0].lower() == "t" or val[0].lower() == "y":
+                    val = True
+                elif val[0].lower() == "f" or val[0].lower() == "n":
+                    val = False
+                else:
+                    # Use default value
+                    val = getattr(self.variables, name)
 
-            if hasattr(self.variables, ""):
-                if type(getattr(self.variables, name)) is bool:
-                    if val == 0:
-                        val = False       
-                    else:
-                        val = True    
             setattr(self.variables, name, val)
         
         # if self.variables.qtrfile:

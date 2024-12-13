@@ -288,11 +288,19 @@ class SfincsGrid:
         x2 = self.data.grid.edge_node_coordinates[:,1,0]
         y1 = self.data.grid.edge_node_coordinates[:,0,1]
         y2 = self.data.grid.edge_node_coordinates[:,1,1]
+        # Check if grid crosses the dateline
+        cross_dateline = False
+        if self.model.crs.is_geographic:
+            if np.max(x1) > 180.0 or np.max(x2) > 180.0:
+                cross_dateline = True
         transformer = Transformer.from_crs(self.model.crs,
                                             3857,
                                             always_xy=True)
         x1, y1 = transformer.transform(x1, y1)
         x2, y2 = transformer.transform(x2, y2)
+        if cross_dateline:
+            x1[x1 < 0] += 40075016.68557849
+            x2[x2 < 0] += 40075016.68557849
         self.df = pd.DataFrame(dict(x1=x1, y1=y1, x2=x2, y2=y2))
 
     def map_overlay(self, file_name, xlim=None, ylim=None, color="black", width=800):
@@ -310,6 +318,8 @@ class SfincsGrid:
                                         always_xy=True)
             xl0, yl0 = transformer.transform(xlim[0], ylim[0])
             xl1, yl1 = transformer.transform(xlim[1], ylim[1])
+            if xl0 > xl1:
+                xl1 += 40075016.68557849
             xlim = [xl0, xl1]
             ylim = [yl0, yl1]
             ratio = (ylim[1] - ylim[0]) / (xlim[1] - xlim[0])

@@ -562,6 +562,11 @@ class SfincsMask:
         # Coordinates of cell centers
         x = self.model.grid.data.grid.face_coordinates[:,0]
         y = self.model.grid.data.grid.face_coordinates[:,1]
+        # Check if grid crosses the dateline
+        cross_dateline = False
+        if self.model.crs.is_geographic:
+            if np.max(x) > 180.0:
+                cross_dateline = True
         mask = self.model.grid.data["mask"].values[:]
         # Get rid of cells with mask = 0
         iok = np.where(mask>0)
@@ -577,6 +582,8 @@ class SfincsMask:
                                             3857,
                                             always_xy=True)
         x, y = transformer.transform(x, y)
+        if cross_dateline:
+            x[x < 0] += 40075016.68557849
 
         self.datashader_dataframe = pd.DataFrame(dict(x=x, y=y, mask=mask))
 
@@ -608,6 +615,8 @@ class SfincsMask:
                                         always_xy=True)
             xl0, yl0 = transformer.transform(xlim[0], ylim[0])
             xl1, yl1 = transformer.transform(xlim[1], ylim[1])
+            if xl0 > xl1:
+                xl1 += 40075016.68557849
             xlim = [xl0, xl1]
             ylim = [yl0, yl1]
             ratio = (ylim[1] - ylim[0]) / (xlim[1] - xlim[0])

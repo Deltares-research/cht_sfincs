@@ -291,6 +291,7 @@ class SfincsBoundaryConditions:
         # Make boolean array for points that are include in a polyline 
         used = np.full(xp.shape, False, dtype=bool)
 
+        # Make list of polylines. Each polyline is a list of indices of boundary points.
         polylines = []
 
         while True:
@@ -300,19 +301,21 @@ class SfincsBoundaryConditions:
                 break
 
             # Find first the unused points
-            i1 = np.where(used == False)[0][0]
+            i1 = np.where(~used)[0][0]
 
             # Set this point to used
             used[i1] = True
 
+            # Start new polyline with index i1
             polyline = [i1] 
 
             while True:
-                # Started new polyline
                 # Compute distances to all points that have not been used
                 xpunused = xp[~used]
                 ypunused = yp[~used]
+                # Get all indices of unused points
                 unused_indices = np.where(~used)[0]
+
                 dst = np.sqrt((xpunused - xp[i1])**2 + (ypunused - yp[i1])**2)
                 if np.all(np.isnan(dst)):
                     break
@@ -326,23 +329,9 @@ class SfincsBoundaryConditions:
                 else:
                     # Last point found
                     break
-                # dst = np.sqrt((xp - xp[i1])**2 + (yp - yp[i1])**2)                                
-                # dst[polyline] = np.nan
-                # if np.all(np.isnan(dst)):
-                #     break
-                # inear = np.nanargmin(dst)
-                # if used[inear]:
-                #     # Last point found
-                #     break
-                # elif dst[inear] < min_dist:
-                #     # Found next point along polyline
-                #     polyline.append(inear)
-                #     used[inear] = True
-                #     i1 = inear
-                # else:
-                #     # Last point found
-                #     break    
-
+            
+            # Now work the other way
+            # Start with first point of polyline
             i1 = polyline[0]
             while True:
                 if np.all(used):
@@ -353,34 +342,17 @@ class SfincsBoundaryConditions:
                 ypunused = yp[~used]
                 unused_indices = np.where(~used)[0]
                 dst = np.sqrt((xpunused - xp[i1])**2 + (ypunused - yp[i1])**2)
-                if np.all(np.isnan(dst)):
-                    break
                 inear = np.nanargmin(dst)
                 inearall = unused_indices[inear]
                 if dst[inear] < min_dist:
                     # Found next point along polyline
                     polyline.insert(0, inearall)
                     used[inearall] = True
+                    # Set index of next point
                     i1 = inearall
                 else:
-                    # Last point found
+                    # Last nearby point found
                     break
-
-                dst = np.sqrt((xp - xp[i1])**2 + (yp - yp[i1])**2)
-                dst[polyline] = np.nan
-                inear = np.nanargmin(dst)
-                if used[inear]:
-                    # Last point found
-                    break
-                elif dst[inear] < min_dist:
-                    # Found next point along polyline
-                    polyline.insert(0, inear)
-                    used[inear] = True
-                    i1 = inear
-                else:
-                    # Last point found
-                    # On to the next polyline
-                    break    
 
             if len(polyline) > 1:  
                 polylines.append(polyline)
@@ -452,7 +424,7 @@ class SfincsBoundaryConditions:
         elif shape == "sine":
             wl = offset + amplitude * np.sin(2 * np.pi * tsec / period + phase * np.pi / 180)
         elif shape == "gaussian":
-            wl = offset + peak * np.exp(-0.5 * ((tsec - tpeak) / duration)**2)
+            wl = offset + peak * np.exp(- ((tsec - tpeak) / (0.25 * duration))**2)
         elif shape == "astronomical":
             # Not implemented
             return
