@@ -60,6 +60,7 @@ class Variables:
         self.crsgeo = False
         self.epsg = None
         self.wiggle_suppression = False
+        self.store_dynamic_bed_level = False
 
         self.sbgfile = None
         self.depfile = None

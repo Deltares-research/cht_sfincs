@@ -23,6 +23,8 @@ import datashader as ds
 import datashader.transfer_functions as tf
 from datashader.utils import export_image
 
+from cht_utils.misc_tools import interp2
+
 class SfincsGrid:
     def __init__(self, model):
         self.model = model
@@ -131,6 +133,17 @@ class SfincsGrid:
         self.clear_temporary_arrays()
 
         print("Time elapsed : " + str(time.time() - start) + " s")
+
+    def interpolate_bathymetry(self, x, y, z, method="linear"):
+        """x, y, and z are numpy arrays with coordinates and bathymetry values"""
+        xy = self.data.grid.face_coordinates
+        # zz = np.full(self.nr_cells, np.nan)
+        xz = xy[:, 0]
+        yz = xy[:, 1]
+        zz = interp2(x, y, z, xz, yz, method=method)
+        ugrid2d = self.data.grid
+        self.data["z"] = xu.UgridDataArray(xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d)
+
 
     def set_bathymetry(self, bathymetry_sets, bathymetry_database=None, quiet=True):
         
@@ -848,9 +861,6 @@ class SfincsGrid:
                             self.mu[iright] = 0
                             self.mu1[iright] = i
                             self.mu2[iright] = -1
-
-
-
 
         print("Setting neighbors left and below ...")
 

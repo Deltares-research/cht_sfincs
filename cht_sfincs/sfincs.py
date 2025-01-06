@@ -23,10 +23,12 @@ from .weirs import SfincsWeirs
 from .wave_makers import SfincsWaveMakers
 from .snapwave import SfincsSnapWave
 from .output import SfincsOutput
+# from .xmi import SfincsXmi
 
 class SFINCS:    
 
-    def __init__(self, root=None, crs=None, mode="w", read_grid_data=True):
+    def __init__(self, root=None, crs=3395, mode="w", read_grid_data=True):
+        # Use World Mercator as default CRS
 
         if not root:
             root = os.getcwd()
@@ -34,6 +36,7 @@ class SFINCS:
         self.exe_path                 = None
         self.path                     = root  
         self.input                    = SfincsInput(self)
+        self.dll_path                 = None
         # if crs is an integer, assume it is an EPSG code
         if isinstance(crs, int):
             crs = CRS.from_epsg(crs)
@@ -53,6 +56,7 @@ class SFINCS:
         self.thin_dams                = SfincsThinDams(self)
         self.weirs                    = SfincsWeirs(self)
         self.output                   = SfincsOutput(self)
+        # self.xmi                      = SfincsXmi(self)
         # self.meteo_forcing            = None
         
         if mode == "r":
