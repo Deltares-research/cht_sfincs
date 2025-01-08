@@ -7,6 +7,8 @@ import os
 import geopandas as gpd
 import shapely
 import pandas as pd
+import numpy as np
+from matplotlib import path
 
 class SfincsObservationPoints:
     def __init__(self, hw):
@@ -76,6 +78,24 @@ class SfincsObservationPoints:
         gdf_new = gpd.GeoDataFrame(gdf_list, crs=self.model.crs)
         self.gdf = pd.concat([self.gdf, gdf_new], ignore_index=True)
 
+    def add_points(self, gdf, name="name"):
+        outline = self.model.grid.exterior.loc[0]["geometry"]
+        gdf = gdf.to_crs(self.model.crs)
+        x = np.empty((len(gdf)))
+        y = np.empty((len(gdf)))
+        for index, row in gdf.iterrows():
+            x[index] = row["geometry"].coords[0][0]
+            y[index] = row["geometry"].coords[0][1]
+        inpol = inpolygon(x, y, outline)
+        gdf_list = []
+        for index, row in gdf.iterrows():
+            if inpol[index]:
+                d = {"name": row[name], "long_name": None, "geometry": shapely.geometry.Point(x[index], y[index])}
+                gdf_list.append(d)
+        gdf_new = gpd.GeoDataFrame(gdf_list, crs=self.model.crs)
+        self.gdf = pd.concat([self.gdf, gdf_new], ignore_index=True)
+
+
     def delete_point(self, name_or_index):
         if type(name_or_index) == str:
             name = name_or_index
@@ -99,3 +119,11 @@ class SfincsObservationPoints:
         for index, row in self.gdf.iterrows():
             names.append(row["name"])
         return names
+
+def inpolygon(xq, yq, p):
+    shape = xq.shape
+    xq = xq.reshape(-1)
+    yq = yq.reshape(-1)
+    q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
+    p = path.Path([(crds[0], crds[1]) for i, crds in enumerate(p.exterior.coords)])
+    return p.contains_points(q).reshape(shape)
