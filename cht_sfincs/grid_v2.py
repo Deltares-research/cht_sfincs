@@ -11,6 +11,10 @@ from matplotlib import path
 from pyproj import CRS, Transformer
 import shapely
 
+from shapely.geometry import Polygon
+from shapely.prepared import prep
+
+
 import xugrid as xu
 import xarray as xr
 import warnings
@@ -50,13 +54,17 @@ class SfincsGrid:
         self.type = "quadtree"
         self.nr_cells = self.data.sizes["mesh2d_nFaces"]
         self.get_exterior()
+        self.level = self.data["level"].values - 1
+        self.nr_refinement_levels = np.max(self.level) + 1
+        self.find_first_cells_in_level()
+        self.dx = self.data.attrs["dx"]
         crd_dict = self.data["crs"].attrs
         if "projected_crs_name" in crd_dict:
             self.model.crs = CRS(crd_dict["projected_crs_name"])
         elif "geographic_crs_name" in crd_dict:
             self.model.crs = CRS(crd_dict["geographic_crs_name"])
         else:
-            print("Could not find CRS in quadtree netcdf file")    
+            print("Could not find CRS in quadtree netcdf file")
 
     def write(self, file_name=None, version=0):
         if file_name is None:
@@ -145,7 +153,7 @@ class SfincsGrid:
         self.data["z"] = xu.UgridDataArray(xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d)
 
 
-    def set_bathymetry(self, bathymetry_sets, bathymetry_database=None, quiet=True):
+    def set_bathymetry(self, bathymetry_sets, bathymetry_database=None, zmin=-1.0e9, zmax=1.0e9, quiet=True):
         
         # from cht_bathymetry.bathymetry_database import bathymetry_database
         # if bathymetry_database is None:
@@ -192,6 +200,10 @@ class SfincsGrid:
                                                                dxmin,
                                                                self.model.crs,
                                                                bathymetry_sets)
+            
+            # Limit zgl to zmin and zmax
+            zgl = np.maximum(zgl, zmin)
+            zgl = np.minimum(zgl, zmax)
 
             zz[cell_indices_in_level] = zgl
 
@@ -566,32 +578,39 @@ class SfincsGrid:
             m0 = min(max(m0, 0), mmax - 1)
             m1 = min(max(m1, 0), mmax - 1)
 
-            # Compute cell centre coordinates of cells in this level in this block
+            # Generate grid (corners)
+            nn, mm = np.meshgrid(np.arange(n0, n1 + 2), np.arange(m0, m1 + 2))
+            xx = self.x0 + self.cosrot * mm * dx - self.sinrot * nn * dy
+            yy = self.y0 + self.sinrot * mm * dx + self.cosrot * nn * dy
+            in_polygon = grid_in_polygon(xx, yy, polygon["geometry"])
+            in_polygon = np.transpose(in_polygon).flatten()
+
             nn, mm = np.meshgrid(np.arange(n0, n1 + 1), np.arange(m0, m1 + 1))
             nn = np.transpose(nn).flatten()
             mm = np.transpose(mm).flatten()
 
-            xcor = np.zeros((4, np.size(nn)))
-            ycor = np.zeros((4, np.size(nn)))
-            xcor[0,:] = self.x0 + self.cosrot * (mm + 0) * dx - self.sinrot * (nn + 0) * dy
-            ycor[0,:] = self.y0 + self.sinrot * (mm + 0) * dx + self.cosrot * (nn + 0) * dy
-            xcor[1,:] = self.x0 + self.cosrot * (mm + 1) * dx - self.sinrot * (nn + 0) * dy
-            ycor[1,:] = self.y0 + self.sinrot * (mm + 1) * dx + self.cosrot * (nn + 0) * dy
-            xcor[2,:] = self.x0 + self.cosrot * (mm + 1) * dx - self.sinrot * (nn + 1) * dy
-            ycor[2,:] = self.y0 + self.sinrot * (mm + 1) * dx + self.cosrot * (nn + 1) * dy
-            xcor[3,:] = self.x0 + self.cosrot * (mm + 0) * dx - self.sinrot * (nn + 1) * dy
-            ycor[3,:] = self.y0 + self.sinrot * (mm + 0) * dx + self.cosrot * (nn + 1) * dy
+            # Compute cell centre coordinates of cells in this level in this block
+            # xcor = np.zeros((4, np.size(nn)))
+            # ycor = np.zeros((4, np.size(nn)))
+            # xcor[0,:] = self.x0 + self.cosrot * (mm + 0) * dx - self.sinrot * (nn + 0) * dy
+            # ycor[0,:] = self.y0 + self.sinrot * (mm + 0) * dx + self.cosrot * (nn + 0) * dy
+            # xcor[1,:] = self.x0 + self.cosrot * (mm + 1) * dx - self.sinrot * (nn + 0) * dy
+            # ycor[1,:] = self.y0 + self.sinrot * (mm + 1) * dx + self.cosrot * (nn + 0) * dy
+            # xcor[2,:] = self.x0 + self.cosrot * (mm + 1) * dx - self.sinrot * (nn + 1) * dy
+            # ycor[2,:] = self.y0 + self.sinrot * (mm + 1) * dx + self.cosrot * (nn + 1) * dy
+            # xcor[3,:] = self.x0 + self.cosrot * (mm + 0) * dx - self.sinrot * (nn + 1) * dy
+            # ycor[3,:] = self.y0 + self.sinrot * (mm + 0) * dx + self.cosrot * (nn + 1) * dy
 
-            # Create np array with False for all cells
-            inp = np.zeros(np.size(nn), dtype=bool)
-            # Loop through 4 corner points
-            # If any corner points falls within the polygon, inp is set to True
-            for j in range(4):
-                inp0 = inpolygon(np.squeeze(xcor[j,:]),
-                                 np.squeeze(ycor[j,:]),
-                                 polygon["geometry"])
-                inp[np.where(inp0)] = True
-            in_polygon = np.where(inp)[0]
+            # # Create np array with False for all cells
+            # inp = np.zeros(np.size(nn), dtype=bool)
+            # # Loop through 4 corner points
+            # # If any corner points falls within the polygon, inp is set to True
+            # for j in range(4):
+            #     inp0 = inpolygon(np.squeeze(xcor[j,:]),
+            #                      np.squeeze(ycor[j,:]),
+            #                      polygon["geometry"])
+            #     inp[np.where(inp0)] = True
+            # in_polygon = np.where(inp)[0]
 
             # Indices of cells in level within polbuf
             nn_in = nn[in_polygon]
@@ -1302,13 +1321,28 @@ def odd(num):
 def even(num):
     return np.mod(num, 2) == 0
 
-def inpolygon(xq, yq, p):
+def inpolygon(xq, yq, p): # p is a Polygon object, xq and yq are arrays of x and y coordinates  
     shape = xq.shape
     xq = xq.reshape(-1)
     yq = yq.reshape(-1)
+    # Create list of points in tuples
     q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
-    p = path.Path([(crds[0], crds[1]) for i, crds in enumerate(p.exterior.coords)])
-    return p.contains_points(q).reshape(shape)
+    # Create list with inout logicals (starting with False)
+    inp = [False for i in range(xq.shape[0])]
+    # Now start with exterior
+    # Check if point is in exterior
+    pth = path.Path([(crds[0], crds[1]) for i, crds in enumerate(p.exterior.coords)])
+    # Check if point is in exterior
+    inext = pth.contains_points(q).astype(bool)
+    # Set inp to True where inext is True
+    inp = np.logical_or(inp, inext)
+    # Check if point is in interior
+    for interior in p.interiors:
+        pth = path.Path([(crds[0], crds[1]) for i, crds in enumerate(interior.coords)])
+        inint = pth.contains_points(q).astype(bool)
+        inp = np.logical_xor(inp, inint)
+    # inp = inexterior(q, p, inp)
+    return inp.reshape(shape)
 
 def binary_search(val_array, vals):    
     indx = np.searchsorted(val_array, vals) # ind is size of vals 
@@ -1326,3 +1360,37 @@ def gdf2list(gdf_in):
    for feature in gdf_in.iterfeatures():
       gdf_out.append(gpd.GeoDataFrame.from_features([feature]))
    return gdf_out
+
+
+
+def grid_in_polygon(x, y, p):
+
+    # Dimensions of the cells
+    rows, cols = x.shape[0] - 1, x.shape[1] - 1
+
+    # Create polygons for each cell
+    x1 = x[:-1, :-1].flatten()
+    y1 = y[:-1, :-1].flatten()
+    x2 = x[1:, 1:].flatten()
+    y2 = y[1:, 1:].flatten()
+    x3 = x[:-1, 1:].flatten()
+    y3 = y[:-1, 1:].flatten()
+    x4 = x[1:, :-1].flatten()
+    y4 = y[1:, :-1].flatten()
+
+    # Prepare the list of cell polygons
+    cell_polygons = np.array([
+        Polygon([(x1[i], y1[i]), (x3[i], y3[i]), (x2[i], y2[i]), (x4[i], y4[i])])
+        for i in range(len(x1))
+    ])
+
+    # Prepare the polygon for faster intersections
+    prepared_p = prep(p)
+
+    # Vectorized intersection checks
+    inp = np.array([prepared_p.intersects(cell) for cell in cell_polygons])
+
+    # Reshape the result back to the grid shape
+    inp = inp.reshape(rows, cols)
+
+    return inp

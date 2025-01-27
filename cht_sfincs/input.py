@@ -173,18 +173,19 @@ class SfincsInput:
                 except:
                     val = None
 
-            if type(getattr(self.variables, name)) is bool:
-                if val == 0:
-                    val = False       
-                elif val == 1:
-                    val = True
-                elif val[0].lower() == "t" or val[0].lower() == "y":
-                    val = True
-                elif val[0].lower() == "f" or val[0].lower() == "n":
-                    val = False
-                else:
-                    # Use default value
-                    val = getattr(self.variables, name)
+            if hasattr(self.variables, name):
+                if type(getattr(self.variables, name)) is bool:
+                    if val == 0:
+                        val = False       
+                    elif val == 1:
+                        val = True
+                    elif val[0].lower() == "t" or val[0].lower() == "y":
+                        val = True
+                    elif val[0].lower() == "f" or val[0].lower() == "n":
+                        val = False
+                    else:
+                        # Use default value
+                        val = getattr(self.variables, name)
 
             setattr(self.variables, name, val)
         

@@ -33,7 +33,8 @@ class SfincsDischargePoints:
         self.gdf = gpd.GeoDataFrame()
         # Loop through points to add them to the gdf
         for ind in range(len(df.x.values)):
-            name = df.name.values[ind]
+            # name = df.name.values[ind]
+            name = str(ind + 1)
             x = df.x.values[ind]
             y = df.y.values[ind]
             self.add_point(x, y, name, q=0.0)

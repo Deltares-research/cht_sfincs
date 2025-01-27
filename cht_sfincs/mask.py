@@ -705,15 +705,9 @@ def inpolygon(xq, yq, p):
     shape = xq.shape
     xq = xq.reshape(-1)
     yq = yq.reshape(-1)
-#    xv = xv.reshape(-1)
-#    yv = yv.reshape(-1)
     q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
-#    q = [Point(xq[i], yq[i]) for i in range(xq.shape[0])]
-#    mp = MultiPoint(q)
     p = path.Path([(crds[0], crds[1]) for i, crds in enumerate(p.exterior.coords)])
-#    p = path.Path([(xv[i], yv[i]) for i in range(xv.shape[0])])
     return p.contains_points(q).reshape(shape)
-#    return mp.within(p)
 
 def binary_search(vals, val):    
     indx = np.searchsorted(vals, val)
