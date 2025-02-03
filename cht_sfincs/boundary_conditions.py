@@ -42,6 +42,10 @@ class SfincsBoundaryConditions:
 
         file_name = os.path.join(self.model.path, self.model.input.variables.bndfile)
 
+        if not os.path.exists(file_name):
+            print(f"Warning! File {file_name} does not exist!")
+            return
+
         # Read the bnd file
         df = pd.read_csv(file_name, index_col=False, header=None,
                          names=['x', 'y'], sep="\s+")
@@ -383,7 +387,7 @@ class SfincsBoundaryConditions:
             # Loop through points in polyline
             for point in new_points:
                 name = str(ip + 1).zfill(4)
-                d = {"name": name, "timeseries": pd.DataFrame(), "geometry": point}
+                d = {"name": name, "timeseries": pd.DataFrame(), "astro": pd.DataFrame(), "geometry": point}
                 gdf_list.append(d)
                 ip += 1
 

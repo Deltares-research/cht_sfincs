@@ -53,14 +53,17 @@ class Variables:
         self.bndtype = 1
         self.advection = False
         self.baro = False
-        self.pavbnd = 0.0
+        self.pavbnd = 101200.0
         self.gapres = 101200.0
         self.advlim = 9999.9
         self.stopdepth = 1000.0
         self.crsgeo = False
         self.epsg = None
         self.wiggle_suppression = False
+        self.storevel = False
+        self.storemeteo = False
         self.store_dynamic_bed_level = False
+        self.utmzone = None
 
         self.sbgfile = None
         self.depfile = None
@@ -125,7 +128,7 @@ class Variables:
 
         self.cdnrb = 3
         self.cdwnd = [0.0, 28.0, 50.0]
-        self.cdval = [0.001, 0.0025, 0.0015]
+        self.cdval = [0.001, 0.0025, 0.0025]
 
 
 class SfincsInput:
