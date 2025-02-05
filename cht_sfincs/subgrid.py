@@ -60,8 +60,8 @@ class SfincsSubgridTable:
               huthresh=0.01,
               zmin=-999999.0,
               zmax=999999.0,
+              weight_option="min",
               file_name="",
-            #   file_name="sfincs.sbg",
               bathymetry_database=None,
               quiet=False,
               progress_bar=None):  
@@ -287,11 +287,6 @@ class SfincsSubgridTable:
             for ii in range(nrbm):
                 for jj in range(nrbn):
 
-                    # if ii<2:
-                    #     continue
-                    # if jj<2:
-                    #     continue
-                    
                     # Count
                     ib += 1
                     
@@ -326,103 +321,7 @@ class SfincsSubgridTable:
                                                                     self.model.crs,
                                                                     bathymetry_sets,
                                                                     method="linear")
-                    
-                    # from cht_utils.misc_tools import interp2, interp2_bilinear
-                    # from pyproj import Transformer
-
-                    # xxx = np.array([593000.0])
-                    # yyy = np.array([5305150.0])
-                    # # zzz, xbxxx, ybxxx, zbxxx, xzbxxx, yzbxxx = bathymetry_database.get_bathymetry_on_grid(xg, yg,
-                    # #                                                 self.model.crs,
-                    # #                                                 bathymetry_sets,
-                    # #                                                 method="linear")
-
-                    # transformer = Transformer.from_crs("epsg:32610", "epsg:3857")
-                    # xxb, yyb = transformer.transform(xxx, yyy)
-                    # zzz = interp2(xb, yb, zb, xxb, yyb)
-                    # print(zzz)
-
-                    
-                    # if ii==2 and jj==2:
-                    #     xg22 = xg
-                    #     yg22 = yg
-                    #     zg22 = zg
-                    #     xb22 = xb
-                    #     yb22 = yb
-                    #     zb22 = zb
-                    #     xzb22 = xzb
-                    #     yzb22 = yzb
-                    # elif ii==2 and jj==3:
-                    #     xg23 = xg
-                    #     yg23 = yg
-                    #     zg23 = zg
-                    #     xb23 = xb
-                    #     yb23 = yb
-                    #     zb23 = zb
-                    #     xzb23 = xzb
-                    #     yzb23 = yzb
-
-                    #     x0 = np.arange(x00, x01, dxp)
-                    #     y0 = np.arange(y00, y01, dyp)
-
-                    #     yy22 = yg22[:,0]
-                    #     yy23 = yg23[:,0]
-
-                    #     xg22 = xg22[2000:,:]
-                    #     yg22 = yg22[2000:,:]
-
-                    #     xg23 = xg23[0:20,:]
-                    #     yg23 = yg23[0:20,:]
-
-                    #     zg22 = zg22[2000:,:]
-                    #     zg23 = zg23[0:20,:]
-
-                    #     # Make a figure with 2 subplots
-                    #     # subplot 1 contains xb22, yb22, zb22
-                    #     # subplot 2 contains xb23, yb23, zb23
-                    #     # plot contours as patches
-
-                    #     import matplotlib.pyplot as plt
-                    #     fig, axs = plt.subplots(3)
-                    #     dz=zg23-zg22
-                    #     zg22=zg22[0:-1,0:-1]
-                    #     zg23=zg23[0:-1,0:-1]
-                    #     dz=dz[0:-1,0:-1]    
-                    #     im0=axs[0].pcolormesh(xg22, yg22, zg22, shading='flat')
-                    #     im1=axs[1].pcolormesh(xg23, yg23, zg23, shading='flat')
-                    #     im2=axs[2].pcolormesh(xg23, yg23, dz, shading='flat')
-                    #     # Add colorbar to each subplot
-                    #     fig.colorbar(im0, ax=axs[0])
-                    #     fig.colorbar(im1, ax=axs[1])
-                    #     fig.colorbar(im2, ax=axs[2])
-
-
-                    #     axs[0].axis('equal')
-                    #     axs[1].axis('equal')
-                    #     axs[2].axis('equal')
-
-
-                    #     # Make a new figre and plot the grids (xzb22, yzb22) and (xzb23, yzb23) in one plot
-                    #     fig2, ax = plt.subplots()
-                    #     ax.plot(xzb22, yzb22, 'r', linewidth=3)
-                    #     ax.plot(np.transpose(xzb22), np.transpose(yzb22), 'r', linewidth=3)
-                    #     ax.plot(xzb23, yzb23, 'b')
-                    #     ax.plot(np.transpose(xzb23), np.transpose(yzb23), 'b')
-                    #     # Set axis equal
-                    #     ax.axis('equal')
-
-                    #     # xbgrd22, ybgrd22 = np.meshgrid(xb22, yb22)
-                    #     # xbgrd23, ybgrd23 = np.meshgrid(xb23, yb23)
-                    #     # fig3, ax3 = plt.subplots()
-                    #     # ax3.plot(xbgrd22, ybgrd22, 'g', linewidth=6)
-                    #     # ax3.plot(np.transpose(xbgrd22), np.transpose(ybgrd22), 'g', linewidth=6)
-                    #     # ax3.plot(xbgrd23, ybgrd23, 'k')
-                    #     # ax3.plot(np.transpose(xbgrd23), np.transpose(ybgrd23), 'k')
-                    #     # # Set axis equal
-                    #     # ax3.axis('equal')
-
-                    #     plt.show()
-                    
+                                        
                     # Multiply zg with depth factor (had to use 0.9746 to get arrival
                     # times right in the Pacific)
                     zg = zg*depth_factor
@@ -619,7 +518,9 @@ class SfincsSubgridTable:
 
                         z_zmin_nm = self.ds["z_zmin"].values[nm]
                         z_zmin_nmu = self.ds["z_zmin"].values[nmu]
-                        zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh, z_zmin_nm, z_zmin_nmu)
+                        zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh,
+                                                                                       z_zmin_nm, z_zmin_nmu,
+                                                                                       weight_option=weight_option)
                         self.ds["uv_zmin"][ip]   = zmin
                         self.ds["uv_zmax"][ip]   = zmax
                         self.ds["uv_havg"][ip,:] = havg
@@ -892,7 +793,7 @@ def subgrid_v_table(elevation, dx, dy, nlevels, zvolmin, max_gradient):
     return z, V, zmin, zmax, zmean
 
 # @njit
-def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B):
+def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B, arnd=1.0e-4, weight_option="mean"):
     """
     map vector of elevation values into a hypsometric hydraulic radius - depth relationship for one u/v point
     Parameters
@@ -921,15 +822,14 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B):
     n   = int(np.size(elevation)) # Nr of pixels in grid cell
     n05 = int(n / 2)
 
-
     # Add tiny random number to each elevation to avoid equal values
-    arnd = 1.0e-6
     zrnd = arnd * np.random.rand(n) - 0.5 * arnd
     elevation += zrnd
 
     dd_a      = elevation[0:n05]
     dd_b      = elevation[n05:]
 
+    # 
     dd_a      = np.maximum(dd_a, z_zmin_A)
     dd_b      = np.maximum(dd_b, z_zmin_B)
 
@@ -1008,10 +908,19 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B):
                 # Ensure that at top level, both pwet_a and pwet_b are 1.0
                 pwet_a = 1.0
                 pwet_b = 1.0        
-            # Weight increases linearly from 0 to 1 from bottom to top bin use percentage wet in sides A and B
-            w     = 2 * np.minimum(pwet_a, pwet_b) / max(pwet_a + pwet_b, 1.0e-9)
-            q     = (1.0 - w) * q_min + w * q_all        # Weighted average of q_min and q_all
-            hmean = (1.0 - w) * h_min + w * h_all        # Weighted average of h_min and h_all
+            if weight_option == "mean":
+                # Weight increases linearly from 0 to 1 from bottom to top bin use percentage wet in sides A and B
+                w = 2 * np.minimum(pwet_a, pwet_b) / max(pwet_a + pwet_b, 1.0e-9)
+                q     = (1.0 - w) * q_min + w * q_all        # Weighted average of q_min and q_all
+                hmean = (1.0 - w) * h_min + w * h_all        # Weighted average of h_min and h_all
+            else:
+                # Take minimum of q_a and q_b
+                if q_a < q_b:
+                    q     = q_a
+                    hmean = h_a
+                else:
+                    q     = q_b
+                    hmean = h_b
             pwet[ibin] = 0.5 * (pwet_a + pwet_b)         # Combined pwet_a and pwet_b
 
         havg[ibin] = hmean                          # conveyance depth
@@ -1027,9 +936,21 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B):
     hfit  = havg_top + zmax - zmin                 # mean water depth in cell as computed in SFINCS (assuming linear relation between water level and water depth above zmax)
 
     # Compute q and navg
-    h     = np.maximum(zfit - elevation, 0.0)      # water depth in each pixel
-    q     = np.mean(h**(5.0 / 3.0) / manning)          # combined unit discharge for cell
-    navg  = np.mean(manning)
+    if weight_option == "mean":
+        # Use entire uv point 
+        h     = np.maximum(zfit - elevation, 0.0)      # water depth in each pixel
+        q     = np.mean(h**(5.0 / 3.0) / manning)      # combined unit discharge for cell
+        navg  = np.mean(manning)
+    else:
+        # Use minimum of q_a and q_b
+        if q_a < q_b:
+            h     = np.maximum(zfit - dd_a, 0.0)         # water depth in each pixel
+            q     = np.mean(h**(5.0 / 3.0) / manning_a)  # combined unit discharge for cell
+            navg  = np.mean(manning_a)
+        else:
+            h     = np.maximum(zfit - dd_b, 0.0)
+            q     = np.mean(h**(5.0 / 3.0) / manning_b)
+            navg  = np.mean(manning_b)
 
     nfit = hfit**(5.0 / 3.0) / q
 
