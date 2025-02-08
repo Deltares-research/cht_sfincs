@@ -519,8 +519,10 @@ class SfincsSubgridTable:
                         z_zmin_nm = self.ds["z_zmin"].values[nm]
                         z_zmin_nmu = self.ds["z_zmin"].values[nmu]
                         zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh,
-                                                                                       z_zmin_nm, z_zmin_nmu,
+                                                                                       z_zmin_a=z_zmin_nm,
+                                                                                       z_zmin_b=z_zmin_nmu,
                                                                                        weight_option=weight_option)
+
                         self.ds["uv_zmin"][ip]   = zmin
                         self.ds["uv_zmax"][ip]   = zmax
                         self.ds["uv_havg"][ip,:] = havg
@@ -528,7 +530,6 @@ class SfincsSubgridTable:
                         self.ds["uv_pwet"][ip,:] = pwet
                         self.ds["uv_ffit"][ip]   = ffit
                         self.ds["uv_navg"][ip]   = navg
-
 
                     if progress_bar:
                         progress_bar.set_value(ibt)
@@ -793,7 +794,7 @@ def subgrid_v_table(elevation, dx, dy, nlevels, zvolmin, max_gradient):
     return z, V, zmin, zmax, zmean
 
 # @njit
-def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B, arnd=1.0e-4, weight_option="mean"):
+def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_a=-99999.0, z_zmin_b=-99999.0, arnd=1.0e-4, weight_option="mean"):
     """
     map vector of elevation values into a hypsometric hydraulic radius - depth relationship for one u/v point
     Parameters
@@ -826,19 +827,19 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B, a
     zrnd = arnd * np.random.rand(n) - 0.5 * arnd
     elevation += zrnd
 
+    # Sort elevation and manning values by side A and B
     dd_a      = elevation[0:n05]
     dd_b      = elevation[n05:]
-
-    # 
-    dd_a      = np.maximum(dd_a, z_zmin_A)
-    dd_b      = np.maximum(dd_b, z_zmin_B)
-
     manning_a = manning[0:n05]
     manning_b = manning[n05:]
 
+    # Ensure that pixels are at least as high as the minimum elevation in the neighbouring cells
+    dd_a      = np.maximum(dd_a, z_zmin_a)
+    dd_b      = np.maximum(dd_b, z_zmin_b)
+
+    # Determine min and max elevation
     zmin_a    = np.min(dd_a)
-    zmax_a    = np.max(dd_a)
-    
+    zmax_a    = np.max(dd_a)    
     zmin_b    = np.min(dd_b)
     zmax_b    = np.max(dd_b)
     
@@ -896,8 +897,10 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B, a
             # Use newer 2 option (minimum of q_a an q_b, minimum of h_a and h_b increasing to h_all, using pwet for weighting) option
             # This is done by making sure that the wet fraction is 0.0 in the first level on the shallowest side (i.e. if ibin==0, pwet_a or pwet_b must be 0.0).
             # As a result, the weight w will be 0.0 in the first level on the shallowest side.
+
             pwet_a = (zbin > dd_a).sum() / (n / 2) 
             pwet_b = (zbin > dd_b).sum() / (n / 2)
+
             if ibin == 0:
                 # Ensure that at bottom level, either pwet_a or pwet_b is 0.0   
                 if pwet_a < pwet_b:
@@ -908,11 +911,13 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B, a
                 # Ensure that at top level, both pwet_a and pwet_b are 1.0
                 pwet_a = 1.0
                 pwet_b = 1.0        
+
             if weight_option == "mean":
                 # Weight increases linearly from 0 to 1 from bottom to top bin use percentage wet in sides A and B
                 w = 2 * np.minimum(pwet_a, pwet_b) / max(pwet_a + pwet_b, 1.0e-9)
                 q     = (1.0 - w) * q_min + w * q_all        # Weighted average of q_min and q_all
                 hmean = (1.0 - w) * h_min + w * h_all        # Weighted average of h_min and h_all
+
             else:
                 # Take minimum of q_a and q_b
                 if q_a < q_b:
@@ -921,6 +926,7 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B, a
                 else:
                     q     = q_b
                     hmean = h_b
+
             pwet[ibin] = 0.5 * (pwet_a + pwet_b)         # Combined pwet_a and pwet_b
 
         havg[ibin] = hmean                          # conveyance depth
@@ -941,6 +947,7 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_A, z_zmin_B, a
         h     = np.maximum(zfit - elevation, 0.0)      # water depth in each pixel
         q     = np.mean(h**(5.0 / 3.0) / manning)      # combined unit discharge for cell
         navg  = np.mean(manning)
+
     else:
         # Use minimum of q_a and q_b
         if q_a < q_b:
