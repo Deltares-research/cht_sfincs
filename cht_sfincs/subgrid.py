@@ -518,10 +518,13 @@ class SfincsSubgridTable:
 
                         z_zmin_nm = self.ds["z_zmin"].values[nm]
                         z_zmin_nmu = self.ds["z_zmin"].values[nmu]
-                        zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh,
-                                                                                       z_zmin_a=z_zmin_nm,
-                                                                                       z_zmin_b=z_zmin_nmu,
-                                                                                       weight_option=weight_option)
+                        zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv,
+                                                                                       manning,
+                                                                                       nr_levels,
+                                                                                       huthresh,
+                                                                                       z_zmin_nm,
+                                                                                       z_zmin_nmu,
+                                                                                       weight_option)
 
                         self.ds["uv_zmin"][ip]   = zmin
                         self.ds["uv_zmax"][ip]   = zmax
@@ -544,191 +547,191 @@ class SfincsSubgridTable:
             self.write(file_name)
 
 
-def process_cell(ic, ds, options):
-    # Loop through all active cells in this block
+# def process_cell(ic, ds, options):
+#     # Loop through all active cells in this block
 
-    index_cells_in_block = options["index_cells_in_block"]
-    n = options["n"]
-    m = options["m"]
-    refi = options["refi"]
-    bn0 = options["bn0"]
-    bm0 = options["bm0"]
-    yg = options["yg"]
-    zg = options["zg"]
-    dxp = options["dxp"]
-    dyp = options["dyp"]
-    nr_levels = options["nr_levels"]
-    max_gradient = options["max_gradient"]
-    index_nm = options["index_nm"]
-    index_mu1 = options["index_mu1"]
-    index_mu2 = options["index_mu2"]
-    index_nu1 = options["index_nu1"]
-    index_nu2 = options["index_nu2"]
-    manning_grid = options["manning_grid"]
-    is_geographic = options["is_geographic"]
-    huthresh = options["huthresh"]
-    mu = options["mu"]
-    mu1 = options["mu1"]
-    mu2 = options["mu2"]
-    nu = options["nu"]
-    nu1 = options["nu1"]
-    nu2 = options["nu2"]
+#     index_cells_in_block = options["index_cells_in_block"]
+#     n = options["n"]
+#     m = options["m"]
+#     refi = options["refi"]
+#     bn0 = options["bn0"]
+#     bm0 = options["bm0"]
+#     yg = options["yg"]
+#     zg = options["zg"]
+#     dxp = options["dxp"]
+#     dyp = options["dyp"]
+#     nr_levels = options["nr_levels"]
+#     max_gradient = options["max_gradient"]
+#     index_nm = options["index_nm"]
+#     index_mu1 = options["index_mu1"]
+#     index_mu2 = options["index_mu2"]
+#     index_nu1 = options["index_nu1"]
+#     index_nu2 = options["index_nu2"]
+#     manning_grid = options["manning_grid"]
+#     is_geographic = options["is_geographic"]
+#     huthresh = options["huthresh"]
+#     mu = options["mu"]
+#     mu1 = options["mu1"]
+#     mu2 = options["mu2"]
+#     nu = options["nu"]
+#     nu1 = options["nu1"]
+#     nu2 = options["nu2"]
 
 
-    indx = index_cells_in_block[ic]
+#     indx = index_cells_in_block[ic]
 
-    # First the volumes in the cells
-    nn  = (n[indx] - bn0) * refi
-    mm  = (m[indx] - bm0) * refi
-    zgc = zg[nn : nn + refi, mm : mm + refi]
+#     # First the volumes in the cells
+#     nn  = (n[indx] - bn0) * refi
+#     mm  = (m[indx] - bm0) * refi
+#     zgc = zg[nn : nn + refi, mm : mm + refi]
 
-    # Compute pixel size in metres
-    if is_geographic:
-        ygc = yg[nn : nn + refi, mm : mm + refi]
-        mean_lat =np.abs(np.mean(ygc))
-        dxpm = dxp*111111.0*np.cos(np.pi*mean_lat/180.0)
-        dypm = dyp*111111.0
-    else:
-        dxpm = dxp
-        dypm = dyp
+#     # Compute pixel size in metres
+#     if is_geographic:
+#         ygc = yg[nn : nn + refi, mm : mm + refi]
+#         mean_lat =np.abs(np.mean(ygc))
+#         dxpm = dxp*111111.0*np.cos(np.pi*mean_lat/180.0)
+#         dypm = dyp*111111.0
+#     else:
+#         dxpm = dxp
+#         dypm = dyp
     
-    zv  = zgc.flatten()   
-    zvmin = -20.0
-    z, v, zmin, zmax, zmean = subgrid_v_table(zv, dxpm, dypm, nr_levels, zvmin, max_gradient)
+#     zv  = zgc.flatten()   
+#     zvmin = -20.0
+#     z, v, zmin, zmax, zmean = subgrid_v_table(zv, dxpm, dypm, nr_levels, zvmin, max_gradient)
 
-    # Check if this is an active point 
-    if index_nm[indx] > -1:
-        ds["z_zmin"][index_nm[indx]]    = zmin
-        ds["z_zmax"][index_nm[indx]]    = zmax
-        ds["z_volmax"][index_nm[indx]]  = v[-1]
-        ds["z_level"][index_nm[indx],:] = z
+#     # Check if this is an active point 
+#     if index_nm[indx] > -1:
+#         ds["z_zmin"][index_nm[indx]]    = zmin
+#         ds["z_zmax"][index_nm[indx]]    = zmax
+#         ds["z_volmax"][index_nm[indx]]  = v[-1]
+#         ds["z_level"][index_nm[indx],:] = z
     
-    # Now the U/V points
-    # First right
-    if mu[indx] <= 0:
-        # Cell to the right is equal or larger
-        if mu1[indx] >= 0:
-            # And it exists
-            iuv = index_mu1[indx]
-            if iuv>=0:
-                nn  = (n[indx] - bn0)*refi
-                mm  = (m[indx] - bm0)*refi + int(0.5*refi)
-                zgu = zg[nn : nn + refi, mm : mm + refi]
-                zgu = np.transpose(zgu)
-                zv  = zgu.flatten()
-                manning = manning_grid[nn : nn + refi, mm : mm + refi]
-                manning = np.transpose(manning)
-                manning = manning.flatten()
-                zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
-                ds["uv_zmin"][iuv]   = zmin
-                ds["uv_zmax"][iuv]   = zmax
-                ds["uv_havg"][iuv,:] = havg
-                ds["uv_nrep"][iuv,:] = nrep
-                ds["uv_pwet"][iuv,:] = pwet
-                ds["uv_ffit"][iuv]   = ffit
-                ds["uv_navg"][iuv]   = navg
-    else:
-        # Cell to the right is smaller
-        if mu1[indx] >= 0:
-            # And the bottom neighbor exists
-            iuv = index_mu1[indx]
-            if iuv>=0:
-                nn = (n[indx] - bn0)*refi
-                mm = (m[indx] - bm0)*refi + int(3*refi/4)
-                zgu = zg[nn : nn + int(refi/2), mm : mm + int(refi/2)]
-                zgu = np.transpose(zgu)
-                zv  = zgu.flatten()
-                manning = manning_grid[nn : nn + int(refi/2), mm : mm + int(refi/2)]
-                manning = np.transpose(manning)
-                manning = manning.flatten()
-                zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
-                ds["uv_zmin"][iuv]   = zmin
-                ds["uv_zmax"][iuv]   = zmax
-                ds["uv_havg"][iuv,:] = havg
-                ds["uv_nrep"][iuv,:] = nrep
-                ds["uv_pwet"][iuv,:] = pwet
-                ds["uv_ffit"][iuv]   = ffit
-                ds["uv_navg"][iuv]   = navg
-        if mu2[indx] >= 0:
-            # And the top neighbor exists
-            iuv = index_mu2[indx]
-            if iuv>=0:
-                nn = (n[indx] - bn0)*refi + int(refi/2)
-                mm = (m[indx] - bm0)*refi + int(3*refi/4)
-                zgu = zg[nn : nn + int(refi/2), mm : mm + int(refi/2)]
-                zgu = np.transpose(zgu)
-                zv  = zgu.flatten()
-                manning = manning_grid[nn : nn + int(refi/2), mm : mm + int(refi/2)]
-                manning = np.transpose(manning)
-                manning = manning.flatten()
-                zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
-                ds["uv_zmin"][iuv]   = zmin
-                ds["uv_zmax"][iuv]   = zmax
-                ds["uv_havg"][iuv,:] = havg
-                ds["uv_nrep"][iuv,:] = nrep
-                ds["uv_pwet"][iuv,:] = pwet
-                ds["uv_ffit"][iuv]   = ffit
-                ds["uv_navg"][iuv]   = navg
+#     # Now the U/V points
+#     # First right
+#     if mu[indx] <= 0:
+#         # Cell to the right is equal or larger
+#         if mu1[indx] >= 0:
+#             # And it exists
+#             iuv = index_mu1[indx]
+#             if iuv>=0:
+#                 nn  = (n[indx] - bn0)*refi
+#                 mm  = (m[indx] - bm0)*refi + int(0.5*refi)
+#                 zgu = zg[nn : nn + refi, mm : mm + refi]
+#                 zgu = np.transpose(zgu)
+#                 zv  = zgu.flatten()
+#                 manning = manning_grid[nn : nn + refi, mm : mm + refi]
+#                 manning = np.transpose(manning)
+#                 manning = manning.flatten()
+#                 zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
+#                 ds["uv_zmin"][iuv]   = zmin
+#                 ds["uv_zmax"][iuv]   = zmax
+#                 ds["uv_havg"][iuv,:] = havg
+#                 ds["uv_nrep"][iuv,:] = nrep
+#                 ds["uv_pwet"][iuv,:] = pwet
+#                 ds["uv_ffit"][iuv]   = ffit
+#                 ds["uv_navg"][iuv]   = navg
+#     else:
+#         # Cell to the right is smaller
+#         if mu1[indx] >= 0:
+#             # And the bottom neighbor exists
+#             iuv = index_mu1[indx]
+#             if iuv>=0:
+#                 nn = (n[indx] - bn0)*refi
+#                 mm = (m[indx] - bm0)*refi + int(3*refi/4)
+#                 zgu = zg[nn : nn + int(refi/2), mm : mm + int(refi/2)]
+#                 zgu = np.transpose(zgu)
+#                 zv  = zgu.flatten()
+#                 manning = manning_grid[nn : nn + int(refi/2), mm : mm + int(refi/2)]
+#                 manning = np.transpose(manning)
+#                 manning = manning.flatten()
+#                 zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
+#                 ds["uv_zmin"][iuv]   = zmin
+#                 ds["uv_zmax"][iuv]   = zmax
+#                 ds["uv_havg"][iuv,:] = havg
+#                 ds["uv_nrep"][iuv,:] = nrep
+#                 ds["uv_pwet"][iuv,:] = pwet
+#                 ds["uv_ffit"][iuv]   = ffit
+#                 ds["uv_navg"][iuv]   = navg
+#         if mu2[indx] >= 0:
+#             # And the top neighbor exists
+#             iuv = index_mu2[indx]
+#             if iuv>=0:
+#                 nn = (n[indx] - bn0)*refi + int(refi/2)
+#                 mm = (m[indx] - bm0)*refi + int(3*refi/4)
+#                 zgu = zg[nn : nn + int(refi/2), mm : mm + int(refi/2)]
+#                 zgu = np.transpose(zgu)
+#                 zv  = zgu.flatten()
+#                 manning = manning_grid[nn : nn + int(refi/2), mm : mm + int(refi/2)]
+#                 manning = np.transpose(manning)
+#                 manning = manning.flatten()
+#                 zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
+#                 ds["uv_zmin"][iuv]   = zmin
+#                 ds["uv_zmax"][iuv]   = zmax
+#                 ds["uv_havg"][iuv,:] = havg
+#                 ds["uv_nrep"][iuv,:] = nrep
+#                 ds["uv_pwet"][iuv,:] = pwet
+#                 ds["uv_ffit"][iuv]   = ffit
+#                 ds["uv_navg"][iuv]   = navg
 
-    # Now above
-    if nu[indx] <= 0:
-        # Cell above is equal or larger
-        if nu1[indx] >= 0:
-            # And it exists
-            iuv = index_nu1[indx]
-            if iuv>=0:
-                nn = (n[indx] - bn0)*refi + int(0.5*refi)
-                mm = (m[indx] - bm0)*refi
-                zgu = zg[nn : nn + refi, mm : mm + refi]
-                zv  = zgu.flatten()
-                manning = manning_grid[nn : nn + refi, mm : mm + refi]
-                manning = manning.flatten()
-                zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
-                ds["uv_zmin"][iuv]   = zmin
-                ds["uv_zmax"][iuv]   = zmax
-                ds["uv_havg"][iuv,:] = havg
-                ds["uv_nrep"][iuv,:] = nrep
-                ds["uv_pwet"][iuv,:] = pwet
-                ds["uv_ffit"][iuv]   = ffit
-                ds["uv_navg"][iuv]   = navg
-    else:
-        # Cell above is smaller
-        if nu1[indx] >= 0:
-            # And the left neighbor exists
-            iuv = index_nu1[indx]
-            if iuv>=0:
-                nn = (n[indx] - bn0)*refi + int(3*refi/4)
-                mm = (m[indx] - bm0)*refi
-                zgu = zg[nn : nn + int(refi/2), mm : mm + int(refi/2)]
-                zv  = zgu.flatten()
-                manning = manning_grid[nn : nn + int(refi/2), mm : mm + int(refi/2)]
-                manning = manning.flatten()
-                zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
-                ds["uv_zmin"][iuv]   = zmin
-                ds["uv_zmax"][iuv]   = zmax
-                ds["uv_havg"][iuv,:] = havg
-                ds["uv_nrep"][iuv,:] = nrep
-                ds["uv_pwet"][iuv,:] = pwet
-                ds["uv_ffit"][iuv]   = ffit
-                ds["uv_navg"][iuv]   = navg
-        if nu2[indx] >= 0:
-            # And the right neighbor exists
-            iuv = index_nu2[indx]
-            if iuv>=0:
-                nn = (n[indx] - bn0)*refi + int(3*refi/4)
-                mm = (m[indx] - bm0)*refi + int(refi/2)
-                zgu = zg[nn : nn + int(refi/2), mm : mm + int(refi/2)]
-                zv  = zgu.flatten()
-                manning = manning_grid[nn : nn + int(refi/2), mm : mm + int(refi/2)]
-                manning = manning.flatten()
-                zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
-                ds["uv_zmin"][iuv]   = zmin
-                ds["uv_zmax"][iuv]   = zmax
-                ds["uv_havg"][iuv,:] = havg
-                ds["uv_nrep"][iuv,:] = nrep
-                ds["uv_pwet"][iuv,:] = pwet
-                ds["uv_ffit"][iuv]   = ffit
-                ds["uv_navg"][iuv]   = navg
+#     # Now above
+#     if nu[indx] <= 0:
+#         # Cell above is equal or larger
+#         if nu1[indx] >= 0:
+#             # And it exists
+#             iuv = index_nu1[indx]
+#             if iuv>=0:
+#                 nn = (n[indx] - bn0)*refi + int(0.5*refi)
+#                 mm = (m[indx] - bm0)*refi
+#                 zgu = zg[nn : nn + refi, mm : mm + refi]
+#                 zv  = zgu.flatten()
+#                 manning = manning_grid[nn : nn + refi, mm : mm + refi]
+#                 manning = manning.flatten()
+#                 zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
+#                 ds["uv_zmin"][iuv]   = zmin
+#                 ds["uv_zmax"][iuv]   = zmax
+#                 ds["uv_havg"][iuv,:] = havg
+#                 ds["uv_nrep"][iuv,:] = nrep
+#                 ds["uv_pwet"][iuv,:] = pwet
+#                 ds["uv_ffit"][iuv]   = ffit
+#                 ds["uv_navg"][iuv]   = navg
+#     else:
+#         # Cell above is smaller
+#         if nu1[indx] >= 0:
+#             # And the left neighbor exists
+#             iuv = index_nu1[indx]
+#             if iuv>=0:
+#                 nn = (n[indx] - bn0)*refi + int(3*refi/4)
+#                 mm = (m[indx] - bm0)*refi
+#                 zgu = zg[nn : nn + int(refi/2), mm : mm + int(refi/2)]
+#                 zv  = zgu.flatten()
+#                 manning = manning_grid[nn : nn + int(refi/2), mm : mm + int(refi/2)]
+#                 manning = manning.flatten()
+#                 zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
+#                 ds["uv_zmin"][iuv]   = zmin
+#                 ds["uv_zmax"][iuv]   = zmax
+#                 ds["uv_havg"][iuv,:] = havg
+#                 ds["uv_nrep"][iuv,:] = nrep
+#                 ds["uv_pwet"][iuv,:] = pwet
+#                 ds["uv_ffit"][iuv]   = ffit
+#                 ds["uv_navg"][iuv]   = navg
+#         if nu2[indx] >= 0:
+#             # And the right neighbor exists
+#             iuv = index_nu2[indx]
+#             if iuv>=0:
+#                 nn = (n[indx] - bn0)*refi + int(3*refi/4)
+#                 mm = (m[indx] - bm0)*refi + int(refi/2)
+#                 zgu = zg[nn : nn + int(refi/2), mm : mm + int(refi/2)]
+#                 zv  = zgu.flatten()
+#                 manning = manning_grid[nn : nn + int(refi/2), mm : mm + int(refi/2)]
+#                 manning = manning.flatten()
+#                 zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv, manning, nr_levels, huthresh)
+#                 ds["uv_zmin"][iuv]   = zmin
+#                 ds["uv_zmax"][iuv]   = zmax
+#                 ds["uv_havg"][iuv,:] = havg
+#                 ds["uv_nrep"][iuv,:] = nrep
+#                 ds["uv_pwet"][iuv,:] = pwet
+#                 ds["uv_ffit"][iuv]   = ffit
+#                 ds["uv_navg"][iuv]   = navg
 
 
 
@@ -794,7 +797,16 @@ def subgrid_v_table(elevation, dx, dy, nlevels, zvolmin, max_gradient):
     return z, V, zmin, zmax, zmean
 
 # @njit
-def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_a=-99999.0, z_zmin_b=-99999.0, arnd=1.0e-4, weight_option="mean"):
+def subgrid_q_table(
+    elevation: np.ndarray,
+    manning: np.ndarray,
+    nlevels: int,
+    huthresh: float,
+    option: int = 2,
+    z_zmin_a: float = -99999.0,
+    z_zmin_b: float = -99999.0,
+    weight_option: str = "min"    
+):
     """
     map vector of elevation values into a hypsometric hydraulic radius - depth relationship for one u/v point
     Parameters
@@ -803,6 +815,11 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_a=-99999.0, z_
     manning : np.ndarray (nr of pixels in one cell) containing subgrid manning roughness values for one grid cell [s m^(-1/3)]
     nlevels : int, number of vertical levels [-]
     huthresh : float, threshold depth [m]
+    option : int, option to use "old" or "new" method for computing conveyance depth at u/v points
+    z_zmin_a : float, elevation of lowest pixel in neighboring cell A [m]
+    z_zmin_b : float, elevation of lowest pixel in neighboring cell B [m]
+    weight_option : str, weight of q between sides A and B ("min" or "mean")
+
     Returns
     -------
     zmin : float, minimum elevation [m]
@@ -814,18 +831,14 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_a=-99999.0, z_
     ffit : float, fitting coefficient [-]
     zz   : np.ndarray (nlevels) elevation of vertical levels [m]
     """
-
+    # Initialize output arrays
     havg = np.zeros(nlevels)
     nrep = np.zeros(nlevels)
     pwet = np.zeros(nlevels)
     zz   = np.zeros(nlevels)
 
     n   = int(np.size(elevation)) # Nr of pixels in grid cell
-    n05 = int(n / 2)
-
-    # Add tiny random number to each elevation to avoid equal values
-    zrnd = arnd * np.random.rand(n) - 0.5 * arnd
-    elevation += zrnd
+    n05 = int(n / 2)              # Nr of pixels in half grid cell 
 
     # Sort elevation and manning values by side A and B
     dd_a      = elevation[0:n05]
@@ -834,6 +847,7 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_a=-99999.0, z_
     manning_b = manning[n05:]
 
     # Ensure that pixels are at least as high as the minimum elevation in the neighbouring cells
+    # This should always be the case, but there may be errors in the interpolation to the subgrid pixels
     dd_a      = np.maximum(dd_a, z_zmin_a)
     dd_b      = np.maximum(dd_b, z_zmin_b)
 
@@ -847,12 +861,11 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_a=-99999.0, z_
     zmin = max(zmin_a, zmin_b) + huthresh
     zmax = max(zmax_a, zmax_b)
     
-    # Make sure zmax is at least 0.001 m higher than zmin
-    if zmax < zmin + 0.001:
-       zmax = max(zmax, zmin + 0.001)
+    # Make sure zmax is at least 0.01 m higher than zmin
+    zmax = max(zmax, zmin + 0.01)
 
     # Determine bin size
-    dlevel = (zmax - zmin)/(nlevels - 1)
+    dlevel = (zmax - zmin) / (nlevels - 1)
 
     # Option can be either 1 ("old") or 2 ("new")
     # Should never use option 1 !
@@ -914,7 +927,7 @@ def subgrid_q_table(elevation, manning, nlevels, huthresh, z_zmin_a=-99999.0, z_
 
             if weight_option == "mean":
                 # Weight increases linearly from 0 to 1 from bottom to top bin use percentage wet in sides A and B
-                w = 2 * np.minimum(pwet_a, pwet_b) / max(pwet_a + pwet_b, 1.0e-9)
+                w     = 2 * np.minimum(pwet_a, pwet_b) / max(pwet_a + pwet_b, 1.0e-9)
                 q     = (1.0 - w) * q_min + w * q_all        # Weighted average of q_min and q_all
                 hmean = (1.0 - w) * h_min + w * h_all        # Weighted average of h_min and h_all
 
