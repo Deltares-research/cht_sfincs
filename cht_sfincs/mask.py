@@ -28,7 +28,7 @@ from datashader.utils import export_image
 class SfincsMask:
     def __init__(self, model):
         self.model       = model
-        # For plotting map overlay (not this is the only data that is stored in the object!)
+        # For plotting map overlay (This is the only data that is stored in the object! All other data is stored in the model.grid.data["mask"])
         self.datashader_dataframe = pd.DataFrame()
 
     def build(self,
@@ -420,48 +420,6 @@ class SfincsMask:
 
         return gdf
 
-    def build_mask_snapwave(self,
-                 zmin=99999.0,
-                 zmax=-99999.0,
-                 include_polygon=None,
-                 exclude_polygon=None,
-                 include_zmin=-99999.0,
-                 include_zmax= 99999.0,
-                 exclude_zmin=-99999.0,
-                 exclude_zmax= 99999.0,
-                 quiet=True):
-
-        if not quiet:
-            print("Building SnapWave quadtree mask ...")
-
-        mask_snapwave = np.zeros(self.nr_cells, dtype=int)
-
-        if zmin>=zmax:
-            # Do not include any points initially
-            if include_polygon is None:
-                print("WARNING: Entire mask set to zeros! Please ensure zmax is greater than zmin, or provide include polygon(s) !")
-                return
-        else:
-            if z is not None:                
-                # Set initial mask based on zmin and zmax
-                iok = np.where((z>=zmin) & (z<=zmax))
-                mask_snapwave[iok] = 1
-            else:
-                print("WARNING: Entire mask set to zeros! No depth values found on grid.")
-                        
-        # Include polygons
-        if include_polygon is not None:
-            for ip, polygon in include_polygon.iterrows():
-                inpol = inpolygon(x, y, polygon["geometry"])
-                iok   = np.where((inpol) & (z>=include_zmin) & (z<=include_zmax))
-                mask_snapwave[iok] = 1
-
-        # Exclude polygons
-        if exclude_polygon is not None:
-            for ip, polygon in exclude_polygon.iterrows():
-                inpol = inpolygon(x, y, polygon["geometry"])
-                iok   = np.where((inpol) & (z>=exclude_zmin) & (z<=exclude_zmax))
-                mask_snapwave[iok] = 0
 
     def read(self):
         # Read in index file, mask file and dep file

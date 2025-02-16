@@ -14,7 +14,6 @@ import shapely
 from shapely.geometry import Polygon
 from shapely.prepared import prep
 
-
 import xugrid as xu
 import xarray as xr
 import warnings
@@ -51,13 +50,17 @@ class SfincsGrid:
             file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
         self.data = xu.open_dataset(file_name)
         self.data.close()
+        # Replace with next line ASAP
+        # self.data = xu.load_dataset(file_name)
+
         self.type = "quadtree"
         self.nr_cells = self.data.sizes["mesh2d_nFaces"]
         self.get_exterior()
-        self.level = self.data["level"].values - 1
+        self.level = self.data["level"].values[:] - 1
         self.nr_refinement_levels = np.max(self.level) + 1
         self.find_first_cells_in_level()
         self.dx = self.data.attrs["dx"]
+
         crd_dict = self.data["crs"].attrs
         if "projected_crs_name" in crd_dict:
             self.model.crs = CRS(crd_dict["projected_crs_name"])
@@ -66,14 +69,17 @@ class SfincsGrid:
         else:
             print("Could not find CRS in quadtree netcdf file")
 
+        self.data["crs"] = self.model.crs.to_epsg()
+        self.data["crs"].attrs = self.model.crs.to_cf()
+
     def write(self, file_name=None, version=0):
         if file_name is None:
             if not self.model.input.variables.qtrfile: 
                 self.model.input.variables.qtrfile = "sfincs.nc"
             file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
-        attrs = self.data.attrs
+        # attrs = self.data.attrs
         ds = self.data.ugrid.to_dataset()
-        ds.attrs = attrs
+        ds.attrs = self.data.attrs
         ds.to_netcdf(file_name)
         ds.close()
 

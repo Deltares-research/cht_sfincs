@@ -111,13 +111,6 @@ class Variables:
         self.snapwave_dtheta      = 15.0
         self.snapwave_hmin        = 0.1
         self.snapwave_fw0         = 0.01
-        self.snapwave_mskfile     = None
-        self.snapwave_bndfile     = None
-        self.snapwave_bhsfile     = None
-        self.snapwave_btpfile     = None
-        self.snapwave_bwdfile     = None
-        self.snapwave_bdsfile     = None
-        self.snapwave_encfile     = None
         self.snapwave_crit        = 0.01
         self.snapwave_igwaves     = True
         self.snapwave_nrsweeps    = 1
@@ -218,6 +211,13 @@ class SfincsInput:
             variables.crsgeo = 1
             variables.latitude = None
 
+        if len(self.model.boundary_conditions.gdf) == 0:
+            variables.bndfile = None
+            variables.bzsfile = None
+
+        if len(self.model.observation_points.gdf) == 0:
+            variables.obsfile = None
+
         if self.model.grid.type == "quadtree":
             # Get rid of grid stuff
             variables.x0               = None
@@ -239,23 +239,28 @@ class SfincsInput:
             variables.snapwave_dtheta      = None
             variables.snapwave_hmin        = None
             variables.snapwave_fw0         = None
-            variables.snapwave_mskfile     = None
-            variables.snapwave_bndfile     = None
-            variables.snapwave_bhsfile     = None
-            variables.snapwave_btpfile     = None
-            variables.snapwave_bwdfile     = None
-            variables.snapwave_bdsfile     = None
-            variables.snapwave_encfile     = None
+            variables.bwvfile              = None
+            variables.bhsfile              = None
+            variables.btpfile              = None
+            variables.bwdfile              = None
+            variables.bdsfile              = None
             variables.snapwave_crit        = None
             variables.snapwave_igwaves     = None
             variables.snapwave_nrsweeps    = None
             variables.storefw              = None
+            variables.wvmfile = None
+        else:    
+            if len(self.model.wave_makers.gdf) == 0:
+                variables.wvmfile = None
 
         if variables.sbgfile is not None:
             variables.manning              = None
             variables.manning_land         = None
             variables.manning_sea          = None
             variables.rgh_lev_land         = None
+
+        if not variables.store_dynamic_bed_level:
+            variables.store_dynamic_bed_level = None
 
         fid = open(input_file, "w")
         for key, value in variables.__dict__.items():
