@@ -159,6 +159,19 @@ class SfincsBoundaryConditions:
             point["timeseries"]["wl"] = dffile.iloc[:, ip].values
             point["timeseries"].set_index("time", inplace=True)
 
+    def check_times(self):
+        t0_model = self.model.input.variables.tstart
+        t1_model = self.model.input.variables.tstop
+        # Boundary conditions
+        if len(self.gdf) > 0:
+            # Get first and last time of first bc point
+            df = self.gdf.loc[0]["timeseries"]
+            t0_bc = df.index[0]
+            t1_bc = df.index[-1]
+            if t0_bc > t0_model or t1_bc < t1_model:
+                return False, "Boundary forcing does not fully cover simulation time. Please consider extending the boundary forcing."
+        return True, ""
+
     def write_boundary_conditions_timeseries(self):
 
         if len(self.gdf.index)==0:

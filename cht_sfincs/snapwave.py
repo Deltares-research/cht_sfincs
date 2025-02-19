@@ -524,10 +524,10 @@ class SnapWaveBoundaryConditions:
 
     def read_boundary_points(self):
         # Read bnd file
-        if not self.model.input.variables.bwvfile:
+        if not self.model.input.variables.snapwave_bndfile:
             return
 
-        file_name = os.path.join(self.model.path, self.model.input.variables.bwvfile)
+        file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_bndfile)
 
         # Read the bnd file
         df = pd.read_csv(file_name, index_col=False, header=None,
@@ -551,10 +551,10 @@ class SnapWaveBoundaryConditions:
         if len(self.gdf.index)==0:
             return
 
-        if not self.model.input.variables.bwvfile:
-            self.model.input.variables.bwvfile = "snapwave.bnd"
+        if not self.model.input.variables.snapwave_bndfile:
+            self.model.input.variables.snapwave_bndfile = "snapwave.bnd"
 
-        file_name = os.path.join(self.model.path, self.model.input.variables.bwvfile)
+        file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_bndfile)
 
         if self.model.crs.is_geographic:
             fid = open(file_name, "w")
@@ -604,16 +604,16 @@ class SnapWaveBoundaryConditions:
 
         if hs:
             # Forcing by time series        
-            if not self.model.input.variables.bwvfile:
-                self.model.input.variables.bwvfile = "sfincs.bwv"
-            if not self.model.input.variables.bhsfile:
-                self.model.input.variables.bhsfile = "sfincs.bhs"
-            if not self.model.input.variables.btpfile:
-                self.model.input.variables.btpfile = "sfincs.btp"
-            if not self.model.input.variables.bwdfile:
-                self.model.input.variables.bwdfile = "sfincs.bwd"
-            if not self.model.input.variables.bdsfile:
-                self.model.input.variables.bdsfile = "sfincs.bds"
+            if not self.model.input.variables.snapwave_bndfile:
+                self.model.input.variables.snapwave_bwvfile = "snapwave.bnd"
+            if not self.model.input.variables.snapwave_bhsfile:
+                self.model.input.variables.snapwave_bhsfile = "snapwave.bhs"
+            if not self.model.input.variables.snapwave_btpfile:
+                self.model.input.variables.snapwave_btpfile = "snapwave.btp"
+            if not self.model.input.variables.snapwave_bwdfile:
+                self.model.input.variables.snapwave_bwdfile = "snapwave.bwd"
+            if not self.model.input.variables.snapwave_bdsfile:
+                self.model.input.variables.snapwave_bdsfile = "snapwave.bds"
                         
             new = True
             if len(self.gdf.index)>0:
@@ -665,7 +665,7 @@ class SnapWaveBoundaryConditions:
     def read_boundary_time_series(self):
         # Read SnapWave bhs, btp, bwd and bds files
 
-        if not self.model.input.variables.bhsfile:
+        if not self.model.input.variables.snapwave_bhsfile:
             return
         if len(self.gdf.index)==0:
             return
@@ -675,7 +675,7 @@ class SnapWaveBoundaryConditions:
         # Time
         
         # Hs        
-        file_name = os.path.join(self.model.path, self.model.input.variables.bhsfile)
+        file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_bhsfile)
         dffile = read_timeseries_file(file_name, tref)
         # Loop through boundary points
         for ip, point in self.gdf.iterrows():
@@ -684,19 +684,19 @@ class SnapWaveBoundaryConditions:
             point["timeseries"].set_index("time", inplace=True)
 
         # Tp       
-        file_name = os.path.join(self.model.path, self.model.input.variables.btpfile)
+        file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_btpfile)
         dffile = read_timeseries_file(file_name, tref)
         for ip, point in self.gdf.iterrows():
             point["timeseries"]["tp"] = dffile.iloc[:, ip].values
 
         # Wd
-        file_name = os.path.join(self.model.path, self.model.input.variables.bwdfile)
+        file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_bwdfile)
         dffile = read_timeseries_file(file_name, tref)
         for ip, point in self.gdf.iterrows():
             point["timeseries"]["wd"] = dffile.iloc[:, ip].values
 
         # Ds
-        file_name = os.path.join(self.model.path, self.model.input.variables.bdsfile)
+        file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_bdsfile)
         dffile = read_timeseries_file(file_name, tref)
         for ip, point in self.gdf.iterrows():
             point["timeseries"]["ds"] = dffile.iloc[:, ip].values
@@ -711,9 +711,9 @@ class SnapWaveBoundaryConditions:
         dt   = (time - tref).total_seconds()
         
         # Hs
-        if not self.model.input.variables.bhsfile:
-            self.model.input.variables.bhsfile = "sfincs.bhs"            
-        file_name = os.path.join(self.model.path, self.model.input.variables.bhsfile)
+        if not self.model.input.variables.snapwave_bhsfile:
+            self.model.input.variables.snapwave_bhsfile = "snapwave.bhs"            
+        file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_bhsfile)
         # Build a new DataFrame
         df = pd.DataFrame()
         for ip, point in self.gdf.iterrows():
@@ -727,9 +727,9 @@ class SnapWaveBoundaryConditions:
         to_fwf(df, file_name)
     
         # Tp
-        if not self.model.input.variables.btpfile:
-            self.model.input.variables.btpfile = "sfincs.btp"            
-        file_name = os.path.join(self.model.path, self.model.input.variables.btpfile)
+        if not self.model.input.variables.snapwave_btpfile:
+            self.model.input.variables.snapwave_btpfile = "snapwave.btp"            
+        file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_btpfile)
         # Build a new DataFrame
         df = pd.DataFrame()
         for ip, point in self.gdf.iterrows():
@@ -743,9 +743,9 @@ class SnapWaveBoundaryConditions:
         to_fwf(df, file_name)
 
         # Wd
-        if not self.model.input.variables.bwdfile:
-            self.model.input.variables.bwdfile = "sfincs.bwd"            
-        file_name = os.path.join(self.model.path, self.model.input.variables.bwdfile)
+        if not self.model.input.variables.snapwave_bwdfile:
+            self.model.input.variables.snapwave_bwdfile = "snapwave.bwd"            
+        file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_bwdfile)
         # Build a new DataFrame
         df = pd.DataFrame()
         for ip, point in self.gdf.iterrows():
@@ -759,9 +759,9 @@ class SnapWaveBoundaryConditions:
         to_fwf(df, file_name)
 
         # Ds
-        if not self.model.input.variables.bdsfile:
-            self.model.input.variables.bdsfile = "sfincs.bds"            
-        file_name = os.path.join(self.model.path, self.model.input.variables.bdsfile)
+        if not self.model.input.variables.snapwave_bndfile:
+            self.model.input.variables.snapwave_bdsfile = "snapwave.bnd"            
+        file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_bdsfile)
         # Build a new DataFrame
         df = pd.DataFrame()
         for ip, point in self.gdf.iterrows():
@@ -895,6 +895,18 @@ class SnapWaveBoundaryConditions:
 
         self.gdf = gpd.GeoDataFrame(gdf_list, crs=self.model.crs)
 
+    def check_times(self):
+        t0_model = self.model.input.variables.tstart
+        t1_model = self.model.input.variables.tstop
+        # Boundary conditions
+        if len(self.gdf) > 0:
+            # Get first and last time of first bc point
+            df = self.gdf.loc[0]["timeseries"]
+            t0_bc = df.index[0]
+            t1_bc = df.index[-1]
+            if t0_bc > t0_model or t1_bc < t1_model:
+                return False, "SnapWave boundary forcing does not fully cover simulation time. Please consider extending the boundary forcing."
+        return True, ""
 
 
 class SfincsSnapWave:

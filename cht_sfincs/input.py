@@ -107,6 +107,11 @@ class Variables:
 
         self.dtwave               = 1800.0
         self.snapwave             = False
+        self.snapwave_bndfile     = None
+        self.snapwave_bhsfile     = None
+        self.snapwave_btpfile     = None
+        self.snapwave_bwdfile     = None
+        self.snapwave_bdsfile     = None
         self.snapwave_gamma       = 0.8
         self.snapwave_dtheta      = 15.0
         self.snapwave_hmin        = 0.1

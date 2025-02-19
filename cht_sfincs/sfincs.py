@@ -184,3 +184,28 @@ class SFINCS:
         self.wave_makers          = SfincsWaveMakers(self)
         self.snapwave             = SfincsSnapWave(self)
 
+    def check_times(self):
+
+        # Check that the boundary and other forcing fully covers the simulation time
+        messages = []
+        okay = True
+
+        # Boundary conditions
+        ok, message = self.boundary_conditions.check_times()
+        if not ok:
+            okay = False
+            messages.append(message)
+        
+        # SnapWave boundary conditions
+        ok, message = self.snapwave.boundary_conditions.check_times()
+        if not ok:
+            okay = False
+            messages.append(message)
+
+        # Discharges
+        ok, message = self.discharge_points.check_times()
+        if not ok:
+            okay = False
+            messages.append(message)
+
+        return okay, messages

@@ -48,10 +48,10 @@ class SfincsGrid:
             if not self.model.input.variables.qtrfile: 
                 self.model.input.variables.qtrfile = "sfincs.nc"
             file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
-        self.data = xu.open_dataset(file_name)
-        self.data.close()
+        # self.data = xu.open_dataset(file_name)
+        # self.data.close()
         # Replace with next line ASAP
-        # self.data = xu.load_dataset(file_name)
+        self.data = xu.load_dataset(file_name)
 
         self.type = "quadtree"
         self.nr_cells = self.data.sizes["mesh2d_nFaces"]

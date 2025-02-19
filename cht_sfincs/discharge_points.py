@@ -186,6 +186,19 @@ class SfincsDischargePoints:
             names.append(row["name"])
         return names
 
+    def check_times(self):
+        t0_model = self.model.input.variables.tstart
+        t1_model = self.model.input.variables.tstop
+        # Boundary conditions
+        if len(self.gdf) > 0:
+            # Get first and last time of first bc point
+            df = self.gdf.loc[0]["timeseries"]
+            t0_bc = df.index[0]
+            t1_bc = df.index[-1]
+            if t0_bc > t0_model or t1_bc < t1_model:
+                return False, "Discharge data does not fully cover simulation time. Please consider extending the discharge time series."
+        return True, ""
+
 def read_timeseries_file(file_name, ref_date):
     # Returns a dataframe with time series for each of the columns
     df = pd.read_csv(file_name, index_col=0, header=None,
