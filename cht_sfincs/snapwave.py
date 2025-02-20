@@ -759,8 +759,8 @@ class SnapWaveBoundaryConditions:
         to_fwf(df, file_name)
 
         # Ds
-        if not self.model.input.variables.snapwave_bndfile:
-            self.model.input.variables.snapwave_bdsfile = "snapwave.bnd"            
+        if not self.model.input.variables.snapwave_bdsfile:
+            self.model.input.variables.snapwave_bdsfile = "snapwave.bds"            
         file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_bdsfile)
         # Build a new DataFrame
         df = pd.DataFrame()

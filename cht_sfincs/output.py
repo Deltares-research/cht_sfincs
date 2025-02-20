@@ -84,7 +84,11 @@ class SfincsOutput:
                     
         return df    
 
-    def read_zsmax(self, time_range=None, zsmax_file=None, output="grid", varname="zsmax"):
+    def read_zsmax(self,
+                   time_range=None,
+                   zsmax_file=None,
+                   output="grid",
+                   varname="zsmax"):
         # Returns xarray data set (not yet) or numpy array with maximum water levels (yet)    
         if not zsmax_file:
             if self.model.input.outputformat[0:3] == "net":
@@ -166,7 +170,7 @@ class SfincsOutput:
                 return zs_da
             else:
                 return data_zs
-            
+
     def read_cumulative_precipitation(self, time_range=None, file_name=None, output="grid"):
     
         if not file_name:
