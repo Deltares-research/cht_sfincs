@@ -522,6 +522,7 @@ class SfincsSubgridTable:
                                                                                        manning,
                                                                                        nr_levels,
                                                                                        huthresh,
+                                                                                       2,
                                                                                        z_zmin_nm,
                                                                                        z_zmin_nmu,
                                                                                        weight_option)

@@ -114,10 +114,10 @@ class SfincsOutput:
             # Find out the shape of the data
             if "mesh2d_face_nodes" in dsin:
                 # Quadtree grid
-                zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:,:], axis=0)
+                zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:], axis=0)
             else:
                 # Regular grid
-                zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:], axis=0)
+                zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:,:], axis=0)
 
             dsin.close()
 
