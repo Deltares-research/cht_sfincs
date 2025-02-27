@@ -88,10 +88,12 @@ class SfincsOutput:
                    time_range=None,
                    zsmax_file=None,
                    output="grid",
-                   varname="zsmax"):
+                   varname="zsmax",
+                   fmt="numpy"):
+
         # Returns xarray data set (not yet) or numpy array with maximum water levels (yet)    
         if not zsmax_file:
-            if self.model.input.outputformat[0:3] == "net":
+            if self.model.input.variables.outputformat[0:3] == "net":
                 zsmax_file = os.path.join(self.model.path, "sfincs_map.nc")
             else:
                 zsmax_file = os.path.join(self.model.path, "zsmax.dat")
@@ -115,13 +117,27 @@ class SfincsOutput:
                 if time<=time_range[1]:
                     it1 = it
 
-            # Find out the shape of the data
-            if "mesh2d_face_nodes" in dsin:
-                # Quadtree grid
-                zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:], axis=0)
+            if fmt=="xarray" or fmt=="xr":
+
+                # Find out the shape of the data
+                if "mesh2d_face_nodes" in dsin:
+                    # Quadtree grid
+                    zsmax = dsin[varname][it0:it1 + 1,:].max(dim="timemax")
+                else:
+                    # Regular grid
+                    zsmax = dsin[varname][it0:it1 + 1,:,:].max(dim="timemax")
+
+                return zsmax            
+
             else:
-                # Regular grid
-                zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:,:], axis=0)
+
+                # Find out the shape of the data
+                if "mesh2d_face_nodes" in dsin:
+                    # Quadtree grid
+                    zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:], axis=0)
+                else:
+                    # Regular grid
+                    zsmax = np.nanmax(dsin[varname].values[it0:it1 + 1,:,:], axis=0)
 
             dsin.close()
 

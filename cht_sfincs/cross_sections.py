@@ -8,6 +8,8 @@ import geopandas as gpd
 import shapely
 import pandas as pd
 
+from cht_utils.pli_file import pli2gdf, gdf2pli
+
 class SfincsCrossSections:
     def __init__(self, hw):
         self.model = hw
@@ -15,68 +17,30 @@ class SfincsCrossSections:
 
     def read(self):
 
-        return
+        # Read in all cross sections
 
-        # Read in all observation points
-
-        if not self.model.input.variables.obsfile:
+        if not self.model.input.variables.crsfile:
             return
 
-        file_name = os.path.join(self.model.path, self.model.input.variables.obsfile)
+        filename = os.path.join(self.model.path, self.model.input.variables.crsfile)
 
-        # Read the bnd file
-        df = pd.read_csv(file_name, index_col=False, header=None,
-             delim_whitespace=True, names=['x', 'y', 'name'])
-
-        gdf_list = []
-        # Loop through points
-        for ind in range(len(df.x.values)):
-            name = df.name.values[ind]
-            x = df.x.values[ind]
-            y = df.y.values[ind]
-            point = shapely.geometry.Point(x, y)
-            d = {"name": name, "long_name": None, "geometry": point}
-            gdf_list.append(d)
-        self.gdf = gpd.GeoDataFrame(gdf_list, crs=self.model.crs)
+        # Read the crs file
+        self.gdf = pli2gdf(filename, crs=self.model.crs)
 
     def write(self, file_name=None):
 
-        return
-
+        if not self.model.input.variables.crsfile:
+            return
         if len(self.gdf.index)==0:
             return
 
-        if not file_name:
-            if not self.model.input.variables.obsfile:
-                return
-            file_name = os.path.join(self.model.path, self.model.input.variables.obsfile)
-        
-        if self.model.crs.is_geographic:
-            fid = open(file_name, "w")
-            for index, row in self.gdf.iterrows():
-                x = row["geometry"].coords[0][0]
-                y = row["geometry"].coords[0][1]
-                name = row["name"]
-                string = f'{x:12.6f}{y:12.6f}  "{name}"\n'
-                fid.write(string)
-            fid.close()
-        else:
-            fid = open(file_name, "w")
-            for index, row in self.gdf.iterrows():
-                x = row["geometry"].coords[0][0]
-                y = row["geometry"].coords[0][1]
-                name = row["name"]
-                string = f'{x:12.1f}{y:12.1f}  "{name}"\n'
-                fid.write(string)
-            fid.close()
+        filename = os.path.join(self.model.path, self.model.input.variables.crsfile)
 
-    def add(self, x, y, name):
-        line = shapely.geometry.LineString(x, y)
-        gdf_list = []
-        d = {"name": name, "long_name": None, "geometry": line}
-        gdf_list.append(d)
-        gdf_new = gpd.GeoDataFrame(gdf_list, crs=self.model.crs)
-        self.gdf = pd.concat([self.gdf, gdf_new], ignore_index=True)
+        gdf2pli(self.gdf, filename)
+
+    def add(self, cross_section):
+        cross_section.set_crs(self.model.crs)
+        self.gdf = pd.concat([self.gdf, cross_section], ignore_index=True)
 
     def delete(self, name_or_index):
         if type(name_or_index) == str:
