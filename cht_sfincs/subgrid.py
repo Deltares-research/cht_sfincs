@@ -34,8 +34,8 @@ class SfincsSubgridTable:
             return
 
         # Read from netcdf file with xarray
-        self.ds = xr.open_dataset(file_name)
-        self.ds.close() # Should this be closed ?
+        self.ds = xr.load_dataset(file_name)
+        # self.ds.close() # Should this be closed ?
 
     def write(self, file_name=None):
         if not file_name:
@@ -81,12 +81,11 @@ class SfincsSubgridTable:
         
         # Dimensions etc
         refi   = nr_subgrid_pixels
-        npc    = grid.nr_cells    
+        nr_cells = grid.data.sizes["mesh2d_nFaces"]
         nr_ref_levs = grid.data.attrs["nr_levels"] # number of refinement levels
         cosrot = np.cos(grid.data.attrs["rotation"]*np.pi/180)
         sinrot = np.sin(grid.data.attrs["rotation"]*np.pi/180)
         nrmax  = 2000
-        # nrmax  = 200
         zminimum = zmin
         zmaximum = zmax
 
@@ -107,7 +106,7 @@ class SfincsSubgridTable:
 
             # Loop through cells to count number of velocity points
             npuv = 0
-            for ip in range(npc):
+            for ip in range(nr_cells):
                 if mu1[ip]>=0:
                     npuv += 1
                 if mu2[ip]>=0:
@@ -125,7 +124,7 @@ class SfincsSubgridTable:
             uv_flags_type = np.zeros(npuv, dtype=int)
             # Determine what type of uv point it is
             ip = -1
-            for ic in range(npc):
+            for ic in range(nr_cells):
                 if mu[ic]<=0:
                     # Regular or coarser to the right
                     if mu1[ic]>=0:
@@ -174,18 +173,20 @@ class SfincsSubgridTable:
                         uv_flags_dir[ip] = 1
                         uv_flags_level[ip] = level[ic] + 1
                         uv_flags_type[ip] = nu[ic]       
-                
+
+            npc = nr_cells   
+
         else:
             # For regular grids, only the points with mask>0 are stored
-            index_nu1 = np.zeros(grid.nr_cells, dtype=int) - 1
-            index_nu2 = np.zeros(grid.nr_cells, dtype=int) - 1
-            index_mu1 = np.zeros(grid.nr_cells, dtype=int) - 1
-            index_mu2 = np.zeros(grid.nr_cells, dtype=int) - 1
-            index_nm  = np.zeros(grid.nr_cells, dtype=int) - 1
+            index_nu1 = np.zeros(nr_cells, dtype=int) - 1
+            index_nu2 = np.zeros(nr_cells, dtype=int) - 1
+            index_mu1 = np.zeros(nr_cells, dtype=int) - 1
+            index_mu2 = np.zeros(nr_cells, dtype=int) - 1
+            index_nm  = np.zeros(nr_cells, dtype=int) - 1
             npuv = 0
             npc = 0
             # Loop through all cells
-            for ip in range(grid.nr_cells):
+            for ip in range(nr_cells):
                 # Check if this cell is active
                 if grid.data["mask"].values[ip] > 0:
                     index_nm[ip] = npc
@@ -207,7 +208,6 @@ class SfincsSubgridTable:
                             index_nu2[ip] = npuv
                             npuv += 1
 
-
         # Create xarray dataset with empty arrays
         self.ds = xr.Dataset()
         self.ds.attrs["version"] = self.version
@@ -228,13 +228,13 @@ class SfincsSubgridTable:
         ilast  = np.zeros(nr_ref_levs, dtype=int)
         nr_cells_per_level = np.zeros(nr_ref_levs, dtype=int)
         ireflast = -1
-        for ic in range(npc):
+        for ic in range(nr_cells):
             if level[ic]>ireflast:
                 ifirst[level[ic]] = ic
                 ireflast = level[ic]
         for ilev in range(nr_ref_levs - 1):
             ilast[ilev] = ifirst[ilev + 1] - 1
-        ilast[nr_ref_levs - 1] = grid.nr_cells - 1
+        ilast[nr_ref_levs - 1] = nr_cells - 1
         for ilev in range(nr_ref_levs):
             nr_cells_per_level[ilev] = ilast[ilev] - ifirst[ilev] + 1 
 
@@ -257,8 +257,8 @@ class SfincsSubgridTable:
             m0 = np.min(m[ifirst[ilev]:ilast[ilev] + 1])
             m1 = np.max(m[ifirst[ilev]:ilast[ilev] + 1]) # + 1 # add extra cell to compute u and v in the last row/column
             
-            dx   = grid.data.attrs["dx"]/2**ilev      # cell size
-            dy   = grid.data.attrs["dy"]/2**ilev      # cell size
+            dx   = grid.data.attrs["dx"] / 2**ilev      # cell size
+            dy   = grid.data.attrs["dy"] / 2**ilev      # cell size
             dxp  = dx/refi              # size of subgrid pixel
             dyp  = dy/refi              # size of subgrid pixel
             

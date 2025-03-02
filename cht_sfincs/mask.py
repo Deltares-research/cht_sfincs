@@ -52,7 +52,9 @@ class SfincsMask:
         if not quiet:
             print("Building mask ...")
 
-        mask = np.zeros(self.model.grid.nr_cells, dtype=np.int8)
+        # Initialize mask
+        nr_cells = len(self.model.grid.data.grid.face_coordinates)
+        mask = np.zeros(nr_cells, dtype=np.int8)
         x, y = self.model.grid.face_coordinates()
         z    = self.model.grid.data["z"].values[:]
 
@@ -422,48 +424,50 @@ class SfincsMask:
 
 
     def read(self):
-        # Read in index file, mask file and dep file
-        msk  = np.full([self.model.input.variables.nmax*self.model.input.variables.mmax], 0)
-        ind  = np.fromfile(self.model.input.variables.indexfile, dtype="i4")
-        npoints  = ind[0]
-        ind = np.squeeze(ind[1:]) - 1
-        mskv = np.fromfile(self.model.input.variables.mskfile, dtype="i1")
-        msk[ind] = mskv
-        dep = np.full([self.model.input.variables.nmax*self.model.input.variables.mmax], 0.0)
-        if self.model.input.variables.depfile:
-            depv  = np.fromfile(self.model.input.variables.depfile, dtype="f4")
-            dep[ind] = depv
-        self.model.grid.data["mask"].values[:] = msk
-        self.model.grid.data["z"].values[:] = dep
+        pass
+        # # Read in index file, mask file and dep file
+        # msk  = np.full([self.model.input.variables.nmax*self.model.input.variables.mmax], 0)
+        # ind  = np.fromfile(self.model.input.variables.indexfile, dtype="i4")
+        # npoints  = ind[0]
+        # ind = np.squeeze(ind[1:]) - 1
+        # mskv = np.fromfile(self.model.input.variables.mskfile, dtype="i1")
+        # msk[ind] = mskv
+        # dep = np.full([self.model.input.variables.nmax*self.model.input.variables.mmax], 0.0)
+        # if self.model.input.variables.depfile:
+        #     depv  = np.fromfile(self.model.input.variables.depfile, dtype="f4")
+        #     dep[ind] = depv
+        # self.model.grid.data["mask"].values[:] = msk
+        # self.model.grid.data["z"].values[:] = dep
 
     def write(self):
-        """Write msk, ind, and dep files"""
-        mskv = self.model.grid.data["mask"].values
-        ind  = np.where(mskv>0)
-        mskv = mskv[ind]
-        depv = self.model.grid.data["z"].values[ind]
+        pass
+        # """Write msk, ind, and dep files"""
+        # mskv = self.model.grid.data["mask"].values
+        # ind  = np.where(mskv>0)
+        # mskv = mskv[ind]
+        # depv = self.model.grid.data["z"].values[ind]
 
-        # Add 1 because indices in SFINCS start with 1, not 0
-        ind = ind[0] + 1
+        # # Add 1 because indices in SFINCS start with 1, not 0
+        # ind = ind[0] + 1
 
-        # Write index file
-        self.model.input.variables.indexfile = "sfincs.ind"
-        file = open(self.model.input.variables.indexfile, "wb")
-        file.write(np.int32(np.size(ind)))
-        file.write(np.int32(ind))
-        file.close()
+        # # Write index file
+        # self.model.input.variables.indexfile = "sfincs.ind"
+        # file = open(self.model.input.variables.indexfile, "wb")
+        # file.write(np.int32(np.size(ind)))
+        # file.write(np.int32(ind))
+        # file.close()
         
-        # Write mask file
-        self.model.input.variables.mskfile = "sfincs.msk"
-        file = open(self.model.input.variables.mskfile, "wb")
-        file.write(np.int8(mskv))
-        file.close()
+        # # Write mask file
+        # self.model.input.variables.mskfile = "sfincs.msk"
+        # file = open(self.model.input.variables.mskfile, "wb")
+        # file.write(np.int8(mskv))
+        # file.close()
 
-        # Write dep file
-        self.model.input.variables.depfile = "sfincs.dep"
-        file = open(self.model.input.variables.depfile, "wb")
-        file.write(np.float32(depv))
-        file.close()
+        # # Write dep file
+        # self.model.input.variables.depfile = "sfincs.dep"
+        # file = open(self.model.input.variables.depfile, "wb")
+        # file.write(np.float32(depv))
+        # file.close()
 
 #     def write_msk_file_snapwave(self):
 #         file_name = os.path.join(self.model.path, self.model.input.variables.snapwave_mskfile)
@@ -516,7 +520,7 @@ class SfincsMask:
             return False
 
     def get_datashader_dataframe(self):
-        # Create a dataframe with points elements
+        """Create a dataframe with points elements for use with datashader"""
         # Coordinates of cell centers
         x = self.model.grid.data.grid.face_coordinates[:,0]
         y = self.model.grid.data.grid.face_coordinates[:,1]
@@ -532,7 +536,7 @@ class SfincsMask:
         y = y[iok]
         mask = mask[iok]
         if np.size(x) == 0:
-            # Return empty dataframe
+            # Set empty dataframe
             self.datashader_dataframe = pd.DataFrame()
             return
         # Transform all to 3857 (web mercator)
@@ -546,7 +550,7 @@ class SfincsMask:
         self.datashader_dataframe = pd.DataFrame(dict(x=x, y=y, mask=mask))
 
     def clear_datashader_dataframe(self):
-        # Called in model.grid.build method
+        """Clear the datashader dataframe"""
         self.datashader_dataframe = pd.DataFrame()
 
     def map_overlay(self,
@@ -562,9 +566,14 @@ class SfincsMask:
         if self.model.grid.data is None:
             # No mask points (yet)
             return False
+
         try:
 
-            # Mask is empty, return False    
+            # Check if datashader dataframe is empty (maybe it was not made yet, or it was cleared)
+            if self.datashader_dataframe.empty:
+                self.get_datashader_dataframe()
+
+            # If it is still empty (because there are no active cells), return False    
             if self.datashader_dataframe.empty:
                 return False
 

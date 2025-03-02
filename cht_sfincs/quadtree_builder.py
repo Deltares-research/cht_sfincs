@@ -1,15 +1,13 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Apr 21 17:24:49 2022
-
-@author: ormondt
-"""
+import numpy as np
+import time
+import xarray as xr
 import time
 import os
 import numpy as np
 from matplotlib import path
 from pyproj import CRS, Transformer
 import shapely
+from scipy.interpolate import RegularGridInterpolator, griddata
 
 from shapely.geometry import Polygon
 from shapely.prepared import prep
@@ -22,100 +20,87 @@ np.warnings = warnings
 
 import pandas as pd
 
-import datashader as ds
-import datashader.transfer_functions as tf
-from datashader.utils import export_image
-
-from cht_utils.misc_tools import interp2
-
-class SfincsGrid:
-    def __init__(self, model):
-        self.model = model
-        self.x0 = None
-        self.y0 = None
-        self.dx = None
-        self.dy = None
-        self.rotation = None
-        self.nr_cells = 0
-        self.nr_refinement_levels = 1
-        self.version = 0
-        self.data = None
-        self.type = "regular"
-        self.exterior = gpd.GeoDataFrame()
-
-    def read(self, file_name=None):
-        if file_name is None:
-            if not self.model.input.variables.qtrfile: 
-                self.model.input.variables.qtrfile = "sfincs.nc"
-            file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
-        self.data = xu.load_dataset(file_name)
-
-        self.type = "quadtree"
-        self.nr_cells = self.data.sizes["mesh2d_nFaces"]
-        self.get_exterior()
-        self.level = self.data["level"].values[:] - 1
-        self.nr_refinement_levels = np.max(self.level) + 1
-        self.find_first_cells_in_level()
-        self.dx = self.data.attrs["dx"]
-
-        crd_dict = self.data["crs"].attrs
-        if "projected_crs_name" in crd_dict:
-            self.model.crs = CRS(crd_dict["projected_crs_name"])
-        elif "geographic_crs_name" in crd_dict:
-            self.model.crs = CRS(crd_dict["geographic_crs_name"])
-        else:
-            print("Could not find CRS in quadtree netcdf file")
-
-        self.data["crs"] = self.model.crs.to_epsg()
-        self.data["crs"].attrs = self.model.crs.to_cf()
-
-    def write(self, file_name=None, version=0):
-        if file_name is None:
-            if not self.model.input.variables.qtrfile: 
-                self.model.input.variables.qtrfile = "sfincs.nc"
-            file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
-        # attrs = self.data.attrs
-        ds = self.data.ugrid.to_dataset()
-        ds.attrs = self.data.attrs
-        ds.to_netcdf(file_name)
-        ds.close()
-
-    def build(self,
-              x0,
-              y0,
-              nmax,
-              mmax,
-              dx,
-              dy,
-              rotation,
+def build_quadtree_xugrid(x0, y0, nmax, mmax, dx, dy, rotation, crs,
               refinement_polygons=None,
               bathymetry_sets=None,
               bathymetry_database=None):
+    """
+    Build a quadtree grid using the xugrid library.
+    
+    Parameters
+    ----------
+    x0, y0 : float
+        Origin of the grid.
+    nmax, mmax : int
+        Number of cells in x and y direction.
+    dx, dy : float
+        Grid spacing in x and y direction.
+    rotation : float
+        Rotation of the grid in degrees.
+    refinement_polygons : geopandas.GeoDataFrame
+        GeoDataFrame with polygons that define the refinement levels.
+    bathymetry_sets : dict
+        Dictionary with bathymetry sets.
+    bathymetry_database : str
+        Path to the bathymetry database.
 
-        print("Building mesh ...")
+    Returns
+    -------
+    xugrid.UgridDataArray
+    """
 
-        # Always quadtree !
-        self.type = "quadtree"
+    grid = QuadtreeGrid()
 
-        start = time.time()
+    grid.build(x0, y0, nmax, mmax, dx, dy, rotation, crs,
+              refinement_polygons,
+              bathymetry_sets,
+              bathymetry_database)
 
-        print("Getting cells ...")
+    return grid.data
+
+def cut_inactive_cells(data):
+    """Cuts inactive cells (where mask == 0) from Quadtree xugrid dataset
+    
+    Parameters
+    ----------
+    data : xu.UgridDataset
+        Quadtree xugrid dataset
+
+    Returns
+    -------
+    xu.UgridDataset
+    """
+    grid = QuadtreeGrid(data=data)
+    grid.cut_inactive_cells()
+    return grid.data
+
+class QuadtreeGrid:
+    def __init__(self, data=None):
+        self.data = data
+
+    def build(self, x0, y0, nmax, mmax, dx, dy, rotation, crs,
+              refinement_polygons,
+              bathymetry_sets,
+              bathymetry_database):    
 
         self.x0 = x0
         self.y0 = y0
-        self.dx = dx
-        self.dy = dy
         self.nmax = nmax
         self.mmax = mmax
+        self.dx = dx
+        self.dy = dy
         self.rotation = rotation
         self.cosrot = np.cos(rotation*np.pi/180)
         self.sinrot = np.sin(rotation*np.pi/180)
+        self.crs = crs
+
+        self.nr_cells = 0
+        self.nr_refinement_levels = 1
+        self.version = 0
+
         self.refinement_polygons = refinement_polygons
         self.bathymetry_sets = bathymetry_sets
         self.bathymetry_database = bathymetry_database
-
-        # Clear mask
-        self.model.mask.clear_datashader_dataframe()
 
         # Make regular grid
         self.get_regular_grid()
@@ -124,7 +109,7 @@ class SfincsGrid:
         self.initialize_data_arrays()
 
         # Refine all cells 
-        if refinement_polygons is not None:
+        if self.refinement_polygons is not None:
             self.refine_mesh()
 
         # Initialize data arrays
@@ -138,231 +123,6 @@ class SfincsGrid:
 
         # Create xugrid dataset 
         self.to_xugrid()
-        
-        self.get_exterior()
-
-        self.clear_temporary_arrays()
-
-        print("Time elapsed : " + str(time.time() - start) + " s")
-
-    def interpolate_bathymetry(self, x, y, z, method="linear"):
-        """x, y, and z are numpy arrays with coordinates and bathymetry values"""
-        xy = self.data.grid.face_coordinates
-        # zz = np.full(self.nr_cells, np.nan)
-        xz = xy[:, 0]
-        yz = xy[:, 1]
-        zz = interp2(x, y, z, xz, yz, method=method)
-        ugrid2d = self.data.grid
-        self.data["z"] = xu.UgridDataArray(xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d)
-
-    def set_bathymetry(self, bathymetry_sets, bathymetry_database=None, zmin=-1.0e9, zmax=1.0e9, quiet=True):
-        
-        # from cht_bathymetry.bathymetry_database import bathymetry_database
-        # if bathymetry_database is None:
-        #     from cht_bathymetry .bathymetry_database import bathymetry_database
-
-        if bathymetry_database is None:
-            print("Error! No bathymetry database provided!")
-            return
-
-        if not quiet:
-            print("Getting bathymetry data ...")
-
-        nlev = self.nr_refinement_levels
-        
-        xy = self.data.grid.face_coordinates
-
-        zz = np.full(self.nr_cells, np.nan)
-                        
-        # Loop through all levels
-        for ilev in range(nlev):
-
-            if not quiet:
-                print("Processing bathymetry level " + str(ilev + 1) + " of " + str(nlev) + " ...")
-            
-            ifirst = self.ifirst[ilev]
-            if ilev<nlev - 1:
-                ilast = self.ifirst[ilev + 1]
-            else:
-                ilast = self.nr_cells - 1
-            
-            # Make blocks off cells in this level only
-            cell_indices_in_level = np.arange(ifirst, ilast + 1, dtype=int)
-                  
-            xz  = xy[cell_indices_in_level, 0]
-            yz  = xy[cell_indices_in_level, 1]
-            dxmin = self.dx / 2**ilev
-
-            # if self.data.grid.crs.is_geographic:
-            if self.model.crs.is_geographic:
-                dxmin = dxmin * 111000.0
-
-            zgl = bathymetry_database.get_bathymetry_on_points(xz,
-                                                               yz,
-                                                               dxmin,
-                                                               self.model.crs,
-                                                               bathymetry_sets)
-            
-            # Limit zgl to zmin and zmax
-            zgl = np.maximum(zgl, zmin)
-            zgl = np.minimum(zgl, zmax)
-
-            zz[cell_indices_in_level] = zgl
-
-        ugrid2d = self.data.grid
-        self.data["z"] = xu.UgridDataArray(xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d)
-
-    def get_bathymetry_min_max(self, ind_ref, ilev, bathymetry_sets, bathymetry_database=None, quiet=True):
-        """"Used to determine min and max bathymetry of a cell (used for refinement)"""
-        
-        if bathymetry_database is None:
-            print("Error! No bathymetry database provided!")
-            return
-
-        if not quiet:
-            print("Getting bathymetry data ...")
-
-        dx = self.dx / 2**ilev
-        dy = self.dy / 2**ilev
-        xz = self.x0 + self.cosrot * (self.m[ind_ref] + 0.5) * dx - self.sinrot * (self.n[ind_ref] + 0.5) * dy
-        yz = self.y0 + self.sinrot * (self.m[ind_ref] + 0.5) * dx + self.cosrot * (self.n[ind_ref] + 0.5) * dy
-
-        # Compute the four corner coordinates of the cell, given that the cosine of the rotation is cosrot and the sine is sinrot and the cell center is xz, yz
-        xcor = np.zeros((4, np.size(xz)))
-        ycor = np.zeros((4, np.size(xz)))
-        xcor[0, :] = xz - 0.5 * self.cosrot * dx - 0.5 * self.sinrot * dy
-        ycor[0, :] = yz - 0.5 * self.sinrot * dx + 0.5 * self.cosrot * dy
-        xcor[1, :] = xz + 0.5 * self.cosrot * dx - 0.5 * self.sinrot * dy
-        ycor[1, :] = yz + 0.5 * self.sinrot * dx + 0.5 * self.cosrot * dy
-        xcor[2, :] = xz + 0.5 * self.cosrot * dx + 0.5 * self.sinrot * dy
-        ycor[2, :] = yz + 0.5 * self.sinrot * dx - 0.5 * self.cosrot * dy
-        xcor[3, :] = xz - 0.5 * self.cosrot * dx + 0.5 * self.sinrot * dy
-        ycor[3, :] = yz - 0.5 * self.sinrot * dx - 0.5 * self.cosrot * dy 
-
-        if self.model.crs.is_geographic:
-            dx = dx * 111000.0
-
-        # Now loop through the 4 corners and get the minimum and maximum bathymetry
-        for i in range(4):
-            zgl = bathymetry_database.get_bathymetry_on_points(xcor[i, :],
-                                                               ycor[i, :],
-                                                               dx,
-                                                               self.model.crs,
-                                                               bathymetry_sets)
-            if i == 0:
-                zmin = zgl
-                zmax = zgl
-            else:
-                zmin = np.minimum(zmin, zgl)
-                zmax = np.maximum(zmax, zgl)    
-
-        return zmin, zmax
-    
-    def snap_to_grid(self, polyline, max_snap_distance=1.0):
-        if len(polyline) == 0:
-            return gpd.GeoDataFrame()
-        geom_list = []
-        for iline, line in polyline.iterrows():
-            geom = line["geometry"]
-            if geom.geom_type == 'LineString':
-                geom_list.append(geom)
-        gdf = gpd.GeoDataFrame({'geometry': geom_list})    
-        print("Snapping to grid ...")
-        snapped_uds, snapped_gdf = xu.snap_to_grid(gdf, self.data.grid, max_snap_distance=max_snap_distance)
-        print("Snapping to grid done.")
-        snapped_gdf = snapped_gdf.set_crs(self.model.crs)
-        return snapped_gdf
-
-    def face_coordinates(self):
-        # if self.data is None:
-        #     return None, None
-        xy = self.data.grid.face_coordinates
-        return xy[:, 0], xy[:,1]
-
-    def get_exterior(self):
-        try:
-            indx = self.data.grid.edge_node_connectivity[self.data.grid.exterior_edges, :]
-            x = self.data.grid.node_x[indx]
-            y = self.data.grid.node_y[indx]
-            # Make linestrings from numpy arrays x and y
-            linestrings = [shapely.LineString(np.column_stack((x[i], y[i]))) for i in range(len(x))]
-            # Merge linestrings
-            merged = shapely.ops.linemerge(linestrings)
-            # Merge polygons
-            polygons = shapely.ops.polygonize(merged)
-    #        polygons = shapely.simplify(polygons, self.dx)
-            self.exterior = gpd.GeoDataFrame(geometry=list(polygons), crs=self.model.crs)
-        except:
-            self.exterior = gpd.GeoDataFrame()    
-
-    def bounds(self, crs=None, buffer=0.0):
-        """Returns list with bounds (lon1, lat1, lon2, lat2), with buffer (default 0.0) and in any CRS (default : same CRS as model)"""
-        if crs is None:
-            crs = self.crs
-        # Convert exterior gdf to WGS 84
-        lst = self.exterior.to_crs(crs=crs).total_bounds.tolist()
-        dx = lst[2] - lst[0]
-        dy = lst[3] - lst[1]
-        lst[0] = lst[0] - buffer * dx
-        lst[1] = lst[1] - buffer * dy
-        lst[2] = lst[2] + buffer * dx
-        lst[3] = lst[3] + buffer * dy
-        return lst
-
-    def get_datashader_dataframe(self):
-        # Create a dataframe with line elements
-        x1 = self.data.grid.edge_node_coordinates[:,0,0]
-        x2 = self.data.grid.edge_node_coordinates[:,1,0]
-        y1 = self.data.grid.edge_node_coordinates[:,0,1]
-        y2 = self.data.grid.edge_node_coordinates[:,1,1]
-        # Check if grid crosses the dateline
-        cross_dateline = False
-        if self.model.crs.is_geographic:
-            if np.max(x1) > 180.0 or np.max(x2) > 180.0:
-                cross_dateline = True
-        transformer = Transformer.from_crs(self.model.crs,
-                                            3857,
-                                            always_xy=True)
-        x1, y1 = transformer.transform(x1, y1)
-        x2, y2 = transformer.transform(x2, y2)
-        if cross_dateline:
-            x1[x1 < 0] += 40075016.68557849
-            x2[x2 < 0] += 40075016.68557849
-        self.df = pd.DataFrame(dict(x1=x1, y1=y1, x2=x2, y2=y2))
-
-    def map_overlay(self, file_name, xlim=None, ylim=None, color="black", width=800):
-        if self.data is None:
-            # No grid (yet)
-            return False
-        try:
-            if not hasattr(self, "df"):
-                self.df = None
-            if self.df is None: 
-                self.get_datashader_dataframe()
-
-            transformer = Transformer.from_crs(4326,
-                                        3857,
-                                        always_xy=True)
-            xl0, yl0 = transformer.transform(xlim[0], ylim[0])
-            xl1, yl1 = transformer.transform(xlim[1], ylim[1])
-            if xl0 > xl1:
-                xl1 += 40075016.68557849
-            xlim = [xl0, xl1]
-            ylim = [yl0, yl1]
-            ratio = (ylim[1] - ylim[0]) / (xlim[1] - xlim[0])
-            height = int(width * ratio)
-            cvs = ds.Canvas(x_range=xlim, y_range=ylim, plot_height=height, plot_width=width)
-            agg = cvs.line(self.df, x=['x1', 'x2'], y=['y1', 'y2'], axis=1)
-            img = tf.shade(agg)
-            path = os.path.dirname(file_name)
-            if not path:
-                path = os.getcwd()
-            name = os.path.basename(file_name)
-            name = os.path.splitext(name)[0]
-            export_image(img, name, export_path=path)
-            return True
-        except Exception as e:
-            return False
 
     def get_regular_grid(self):
         # Build initial grid with one level
@@ -378,6 +138,28 @@ class SfincsGrid:
         self.find_first_cells_in_level()
         # Compute cell center coordinates self.x and self.y
         self.compute_cell_center_coordinates()
+
+    def initialize_data_arrays(self):
+        # Set indices of neighbors to -1
+        self.mu  = np.zeros(self.nr_cells, dtype=np.int8)
+        self.mu1 = np.zeros(self.nr_cells, dtype=int) - 1
+        self.mu2 = np.zeros(self.nr_cells, dtype=int) - 1
+        self.md  = np.zeros(self.nr_cells, dtype=np.int8)
+        self.md1 = np.zeros(self.nr_cells, dtype=int) - 1
+        self.md2 = np.zeros(self.nr_cells, dtype=int) - 1
+        self.nu  = np.zeros(self.nr_cells, dtype=np.int8)
+        self.nu1 = np.zeros(self.nr_cells, dtype=int) - 1
+        self.nu2 = np.zeros(self.nr_cells, dtype=int) - 1
+        self.nd  = np.zeros(self.nr_cells, dtype=np.int8)
+        self.nd1 = np.zeros(self.nr_cells, dtype=int) - 1
+        self.nd2 = np.zeros(self.nr_cells, dtype=int) - 1
+
+        # Set initial depth
+        self.z = np.zeros(self.nr_cells, dtype=float)
+        # Set initial SFINCS mask to zeros
+        self.mask = np.zeros(self.nr_cells, dtype=np.int8)
+        # Set initial SnapWave mask to zeros
+        self.snapwave_mask = np.zeros(self.nr_cells, dtype=np.int8)
 
     def refine_mesh(self): 
         # Loop through rows in gdf and create list of polygons
@@ -453,29 +235,6 @@ class SfincsGrid:
             nn, mm = np.meshgrid(np.arange(n0, n1 + 1), np.arange(m0, m1 + 1))
             nn = np.transpose(nn).flatten()
             mm = np.transpose(mm).flatten()
-
-            # Compute cell centre coordinates of cells in this level in this block
-            # xcor = np.zeros((4, np.size(nn)))
-            # ycor = np.zeros((4, np.size(nn)))
-            # xcor[0,:] = self.x0 + self.cosrot * (mm + 0) * dx - self.sinrot * (nn + 0) * dy
-            # ycor[0,:] = self.y0 + self.sinrot * (mm + 0) * dx + self.cosrot * (nn + 0) * dy
-            # xcor[1,:] = self.x0 + self.cosrot * (mm + 1) * dx - self.sinrot * (nn + 0) * dy
-            # ycor[1,:] = self.y0 + self.sinrot * (mm + 1) * dx + self.cosrot * (nn + 0) * dy
-            # xcor[2,:] = self.x0 + self.cosrot * (mm + 1) * dx - self.sinrot * (nn + 1) * dy
-            # ycor[2,:] = self.y0 + self.sinrot * (mm + 1) * dx + self.cosrot * (nn + 1) * dy
-            # xcor[3,:] = self.x0 + self.cosrot * (mm + 0) * dx - self.sinrot * (nn + 1) * dy
-            # ycor[3,:] = self.y0 + self.sinrot * (mm + 0) * dx + self.cosrot * (nn + 1) * dy
-
-            # # Create np array with False for all cells
-            # inp = np.zeros(np.size(nn), dtype=bool)
-            # # Loop through 4 corner points
-            # # If any corner points falls within the polygon, inp is set to True
-            # for j in range(4):
-            #     inp0 = inpolygon(np.squeeze(xcor[j,:]),
-            #                      np.squeeze(ycor[j,:]),
-            #                      polygon["geometry"])
-            #     inp[np.where(inp0)] = True
-            # in_polygon = np.where(inp)[0]
 
             # Indices of cells in level within polbuf
             nn_in = nn[in_polygon]
@@ -559,28 +318,6 @@ class SfincsGrid:
 
         if np.any(ind_nbr):
             self.refine_cells(ind_nbr, ilev - 1)
-
-    def initialize_data_arrays(self):
-        # Set indices of neighbors to -1
-        self.mu  = np.zeros(self.nr_cells, dtype=np.int8)
-        self.mu1 = np.zeros(self.nr_cells, dtype=int) - 1
-        self.mu2 = np.zeros(self.nr_cells, dtype=int) - 1
-        self.md  = np.zeros(self.nr_cells, dtype=np.int8)
-        self.md1 = np.zeros(self.nr_cells, dtype=int) - 1
-        self.md2 = np.zeros(self.nr_cells, dtype=int) - 1
-        self.nu  = np.zeros(self.nr_cells, dtype=np.int8)
-        self.nu1 = np.zeros(self.nr_cells, dtype=int) - 1
-        self.nu2 = np.zeros(self.nr_cells, dtype=int) - 1
-        self.nd  = np.zeros(self.nr_cells, dtype=np.int8)
-        self.nd1 = np.zeros(self.nr_cells, dtype=int) - 1
-        self.nd2 = np.zeros(self.nr_cells, dtype=int) - 1
-
-        # Set initial depth
-        self.z = np.zeros(self.nr_cells, dtype=float)
-        # Set initial SFINCS mask to zeros
-        self.mask = np.zeros(self.nr_cells, dtype=np.int8)
-        # Set initial SnapWave mask to zeros
-        self.snapwave_mask = np.zeros(self.nr_cells, dtype=np.int8)
 
     def get_neighbors(self):
         # Get mu, mu1, mu2, nu, nu1, nu2 for all cells   
@@ -720,7 +457,7 @@ class SfincsGrid:
 
         # Making global model
         # Check if CRS is geographic
-        if self.model.crs.is_geographic:
+        if self.crs.is_geographic:
             # Now check if mmax * dx is 360
             if self.mmax * self.dx > 359 and self.mmax * self.dx < 361:
                 # We have a global model
@@ -917,13 +654,13 @@ class SfincsGrid:
         m = self.m
         level = self.level
 
-        nmax       = self.nmax * 2**(self.nr_refinement_levels - 1) + 1
+        nmax = self.nmax * 2**(self.nr_refinement_levels - 1) + 1
 
         face_nodes_n = np.full((8,self.nr_cells), -1, dtype=int)
         face_nodes_m = np.full((8,self.nr_cells), -1, dtype=int)
         face_nodes_nm = np.full((8,self.nr_cells), -1, dtype=int)
 
-        # HIghest refinement level 
+        # Highest refinement level 
         ifac = 2**(self.nr_refinement_levels - level - 1)
         dxf = self.dx / 2**(self.nr_refinement_levels - 1)
         dyf = self.dy / 2**(self.nr_refinement_levels - 1)
@@ -1005,7 +742,7 @@ class SfincsGrid:
 
         ugrid2d = xu.Ugrid2d(nodes[:, 0], nodes[:, 1], fill_value, faces)
 
-        ugrid2d.set_crs(self.model.crs)
+        ugrid2d.set_crs(self.crs)
 
         # Set datashader df to None
         self.df = None 
@@ -1016,9 +753,104 @@ class SfincsGrid:
 
         return ugrid2d
 
+    def to_xugrid(self):    
+
+        print("Making XUGrid ...")
+
+        # Create the grid
+        ugrid2d = self.get_ugrid2d()
+
+        # Create the dataset
+        self.data = xu.UgridDataset(grids=ugrid2d)
+
+        # Add attributes
+        attrs = {"x0": self.x0,
+                 "y0": self.y0,
+                 "nmax": self.nmax,
+                 "mmax": self.mmax,
+                 "dx": self.dx,
+                 "dy": self.dy,
+                 "rotation": self.rotation,
+                 "nr_levels": self.nr_refinement_levels}
+        self.data.attrs = attrs
+
+        # Now add the data arrays
+        self.data["crs"] = self.crs.to_epsg()
+        self.data["crs"].attrs = self.crs.to_cf()
+        self.data["level"] = xu.UgridDataArray(xr.DataArray(data=self.level + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["z"] = xu.UgridDataArray(xr.DataArray(data=self.z, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["mask"] = xu.UgridDataArray(xr.DataArray(data=self.mask, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["snapwave_mask"] = xu.UgridDataArray(xr.DataArray(data=self.snapwave_mask, dims=[ugrid2d.face_dimension]), ugrid2d)
+
+        self.data["n"] = xu.UgridDataArray(xr.DataArray(data=self.n + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["m"] = xu.UgridDataArray(xr.DataArray(data=self.m + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+
+        self.data["mu"]  = xu.UgridDataArray(xr.DataArray(data=self.mu, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["mu1"] = xu.UgridDataArray(xr.DataArray(data=self.mu1 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["mu2"] = xu.UgridDataArray(xr.DataArray(data=self.mu2 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["md"]  = xu.UgridDataArray(xr.DataArray(data=self.md, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["md1"] = xu.UgridDataArray(xr.DataArray(data=self.md1 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["md2"] = xu.UgridDataArray(xr.DataArray(data=self.md2 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+
+        self.data["nu"]  = xu.UgridDataArray(xr.DataArray(data=self.nu, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["nu1"] = xu.UgridDataArray(xr.DataArray(data=self.nu1 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["nu2"] = xu.UgridDataArray(xr.DataArray(data=self.nu2 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["nd"]  = xu.UgridDataArray(xr.DataArray(data=self.nd, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["nd1"] = xu.UgridDataArray(xr.DataArray(data=self.nd1 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["nd2"] = xu.UgridDataArray(xr.DataArray(data=self.nd2 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
+
+    def get_bathymetry_min_max(self, ind_ref, ilev, bathymetry_sets, bathymetry_database=None, quiet=True):
+        """"Used to determine min and max bathymetry of a cell (used for refinement)"""
+        
+        if bathymetry_database is None:
+            print("Error! No bathymetry database provided!")
+            return
+
+        if not quiet:
+            print("Getting bathymetry data ...")
+
+        dx = self.dx / 2**ilev
+        dy = self.dy / 2**ilev
+        xz = self.x0 + self.cosrot * (self.m[ind_ref] + 0.5) * dx - self.sinrot * (self.n[ind_ref] + 0.5) * dy
+        yz = self.y0 + self.sinrot * (self.m[ind_ref] + 0.5) * dx + self.cosrot * (self.n[ind_ref] + 0.5) * dy
+
+        # Compute the four corner coordinates of the cell, given that the cosine of the rotation is cosrot and the sine is sinrot and the cell center is xz, yz
+        xcor = np.zeros((4, np.size(xz)))
+        ycor = np.zeros((4, np.size(xz)))
+        xcor[0, :] = xz - 0.5 * self.cosrot * dx - 0.5 * self.sinrot * dy
+        ycor[0, :] = yz - 0.5 * self.sinrot * dx + 0.5 * self.cosrot * dy
+        xcor[1, :] = xz + 0.5 * self.cosrot * dx - 0.5 * self.sinrot * dy
+        ycor[1, :] = yz + 0.5 * self.sinrot * dx + 0.5 * self.cosrot * dy
+        xcor[2, :] = xz + 0.5 * self.cosrot * dx + 0.5 * self.sinrot * dy
+        ycor[2, :] = yz + 0.5 * self.sinrot * dx - 0.5 * self.cosrot * dy
+        xcor[3, :] = xz - 0.5 * self.cosrot * dx + 0.5 * self.sinrot * dy
+        ycor[3, :] = yz - 0.5 * self.sinrot * dx - 0.5 * self.cosrot * dy 
+
+        if self.crs.is_geographic:
+            dx = dx * 111000.0
+
+        # Now loop through the 4 corners and get the minimum and maximum bathymetry
+        for i in range(4):
+            zgl = bathymetry_database.get_bathymetry_on_points(xcor[i, :],
+                                                               ycor[i, :],
+                                                               dx,
+                                                               self.crs,
+                                                               bathymetry_sets)
+            if i == 0:
+                zmin = zgl
+                zmax = zgl
+            else:
+                zmin = np.minimum(zmin, zgl)
+                zmax = np.maximum(zmax, zgl)    
+
+        return zmin, zmax
+
     def cut_inactive_cells(self):
 
         print("Removing inactive cells ...")
+
+        # Set crs
+        self.crs = CRS.from_epsg(self.data["crs"].values)
 
         # In the xugrid data, the indices are 1-based, so we need to subtract 1 
         n = self.data["n"].values[:] - 1
@@ -1030,6 +862,16 @@ class SfincsGrid:
 
         indx = np.where((mask + swmask)>0)
             
+        self.nr_refinement_levels = self.data.attrs["nr_levels"]
+        self.nmax = self.data.attrs["nmax"]
+        self.mmax = self.data.attrs["mmax"]
+        self.x0 = self.data.attrs["x0"]
+        self.y0 = self.data.attrs["y0"]
+        self.rotation = self.data.attrs["rotation"]
+        self.cosrot = np.cos(np.radians(self.rotation))
+        self.sinrot = np.sin(np.radians(self.rotation))
+        self.dx = self.data.attrs["dx"]
+        self.dy = self.data.attrs["dy"]
         self.nr_cells = np.size(indx)
         self.n        = n[indx]
         self.m        = m[indx]
@@ -1056,129 +898,7 @@ class SfincsGrid:
         self.get_neighbors() 
         self.get_uv_points()
         self.to_xugrid()
-        self.get_exterior()
- 
-    def to_xugrid(self):    
 
-        print("Making XUGrid ...")
-
-        # Create the grid
-        ugrid2d = self.get_ugrid2d()
-
-        # Create the dataset
-        self.data = xu.UgridDataset(grids=ugrid2d)
-
-        # Add attributes
-        attrs = {"x0": self.x0,
-                 "y0": self.y0,
-                 "nmax": self.nmax,
-                 "mmax": self.mmax,
-                 "dx": self.dx,
-                 "dy": self.dy,
-                 "rotation": self.rotation,
-                 "nr_levels": self.nr_refinement_levels}
-        self.data.attrs = attrs
-
-        # Now add the data arrays
-        self.data["crs"] = self.model.crs.to_epsg()
-        self.data["crs"].attrs = self.model.crs.to_cf()
-        self.data["level"] = xu.UgridDataArray(xr.DataArray(data=self.level + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["z"] = xu.UgridDataArray(xr.DataArray(data=self.z, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["mask"] = xu.UgridDataArray(xr.DataArray(data=self.mask, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["snapwave_mask"] = xu.UgridDataArray(xr.DataArray(data=self.snapwave_mask, dims=[ugrid2d.face_dimension]), ugrid2d)
-
-        self.data["n"] = xu.UgridDataArray(xr.DataArray(data=self.n + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["m"] = xu.UgridDataArray(xr.DataArray(data=self.m + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-
-        self.data["mu"]  = xu.UgridDataArray(xr.DataArray(data=self.mu, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["mu1"] = xu.UgridDataArray(xr.DataArray(data=self.mu1 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["mu2"] = xu.UgridDataArray(xr.DataArray(data=self.mu2 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["md"]  = xu.UgridDataArray(xr.DataArray(data=self.md, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["md1"] = xu.UgridDataArray(xr.DataArray(data=self.md1 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["md2"] = xu.UgridDataArray(xr.DataArray(data=self.md2 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-
-        self.data["nu"]  = xu.UgridDataArray(xr.DataArray(data=self.nu, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["nu1"] = xu.UgridDataArray(xr.DataArray(data=self.nu1 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["nu2"] = xu.UgridDataArray(xr.DataArray(data=self.nu2 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["nd"]  = xu.UgridDataArray(xr.DataArray(data=self.nd, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["nd1"] = xu.UgridDataArray(xr.DataArray(data=self.nd1 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-        self.data["nd2"] = xu.UgridDataArray(xr.DataArray(data=self.nd2 + 1, dims=[ugrid2d.face_dimension]), ugrid2d)
-
-        # Get rid of temporary arrays
-        self.clear_temporary_arrays()
-
-    def clear_temporary_arrays(self):
-        pass
-
-    def find_lower_level_neighbors(self, ind_ref, ilev):
-
-        # ind_ref are the indices of the cells that need to be refined
-
-        n = self.n[ind_ref]
-        m = self.m[ind_ref]
-
-        n_odd = np.where(odd(n))
-        m_odd = np.where(odd(m))
-        n_even = np.where(even(n))
-        m_even = np.where(even(m))
-        
-        ill   = np.intersect1d(n_even, m_even)
-        iul   = np.intersect1d(n_odd, m_even)
-        ilr   = np.intersect1d(n_even, m_odd)
-        iur   = np.intersect1d(n_odd, m_odd)
-
-        n_nbr = np.zeros((2, np.size(n)), dtype=int)        
-        m_nbr = np.zeros((2, np.size(n)), dtype=int)
-
-        # LL
-        n0 = np.int32(n[ill] / 2)
-        m0 = np.int32(m[ill] / 2)
-        n_nbr[0, ill] = n0 - 1
-        m_nbr[0, ill] = m0
-        n_nbr[1, ill] = n0
-        m_nbr[1, ill] = m0 - 1
-        # UL
-        n0 = np.int32((n[iul] - 1) / 2)
-        m0 = np.int32(m[iul] / 2)
-        n_nbr[0, iul] = n0 + 1
-        m_nbr[0, iul] = m0
-        n_nbr[1, iul] = n0
-        m_nbr[1, iul] = m0 - 1
-        # LR
-        n0 = np.int32(n[ilr] / 2)
-        m0 = np.int32((m[ilr] - 1) / 2)
-        n_nbr[0, ilr] = n0 - 1
-        m_nbr[0, ilr] = m0
-        n_nbr[1, ilr] = n0
-        m_nbr[1, ilr] = m0 + 1
-        # UR
-        n0 = np.int32((n[iur] - 1) / 2)
-        m0 = np.int32((m[iur] - 1) / 2)
-        n_nbr[0, iur] = n0 + 1
-        m_nbr[0, iur] = m0
-        n_nbr[1, iur] = n0
-        m_nbr[1, iur] = m0 + 1
-
-        nmax = self.nmax * 2**(ilev - 1) + 1
-
-        n_nbr = n_nbr.flatten()
-        m_nbr = m_nbr.flatten()
-        nm_nbr = m_nbr * nmax + n_nbr
-        nm_nbr = np.sort(np.unique(nm_nbr, return_index=False))
-
-        # Actual cells in the coarser level 
-        n_level = self.n[self.ifirst[ilev - 1]:self.ilast[ilev - 1] + 1]
-        m_level = self.m[self.ifirst[ilev - 1]:self.ilast[ilev - 1] + 1]
-        nm_level = m_level * nmax + n_level
-
-        # Find  
-        ind_nbr = binary_search(nm_level, nm_nbr)
-        ind_nbr = ind_nbr[ind_nbr>=0]
-
-        if np.any(ind_nbr):
-            ind_nbr += self.ifirst[ilev - 1]
-
-        return ind_nbr
 
 def odd(num):
     return np.mod(num, 2) == 1
@@ -1219,14 +939,21 @@ def binary_search(val_array, vals):
     indices[not_ok] = -1
     return indices
 
-
-def gdf2list(gdf_in):
-   gdf_out = []
-   for feature in gdf_in.iterfeatures():
-      gdf_out.append(gpd.GeoDataFrame.from_features([feature]))
-   return gdf_out
-
-
+def interp2(x0, y0, z0, x1, y1, method="linear"):
+    
+    f = RegularGridInterpolator((y0, x0), z0,
+                                bounds_error=False, fill_value=np.nan, method=method)
+    # reshape x1 and y1
+    if x1.ndim>1:
+        sz = x1.shape
+        x1 = x1.reshape(sz[0]*sz[1])
+        y1 = y1.reshape(sz[0]*sz[1])    
+        # interpolate
+        z1 = f((y1,x1)).reshape(sz)        
+    else:    
+        z1 = f((y1,x1))
+    
+    return z1
 
 def grid_in_polygon(x, y, p):
 

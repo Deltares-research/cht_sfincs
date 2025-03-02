@@ -11,7 +11,7 @@ from pyproj import CRS
 from .input import SfincsInput
 
 from .subgrid import SfincsSubgridTable
-from .grid_v2 import SfincsGrid
+from .quadtree import SfincsGrid
 from .mask import SfincsMask
 from .initial_conditions import SfincsInitialConditions
 from .boundary_conditions import SfincsBoundaryConditions
