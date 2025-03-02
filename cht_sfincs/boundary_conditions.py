@@ -23,6 +23,7 @@ class SfincsBoundaryConditions:
         self.times = []
 
     def read(self):
+        """Read SFINCS boundary conditions (*.bnd, *.bzs, *.bca) files"""
         # Read in all boundary data
         self.read_boundary_points()
         self.read_boundary_conditions_timeseries()
