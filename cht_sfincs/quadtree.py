@@ -64,7 +64,7 @@ class SfincsGrid:
             if not self.model.input.variables.qtrfile: 
                 self.model.input.variables.qtrfile = "sfincs.nc"
             file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
-        # attrs = self.data.attrs
+
         ds = self.data.ugrid.to_dataset()
         ds.attrs = self.data.attrs
         ds.to_netcdf(file_name)
@@ -88,6 +88,7 @@ class SfincsGrid:
         self.type = "quadtree"
 
         # Clear mask datashader dataframe
+        self.clear_datashader_dataframe()
         self.model.mask.clear_datashader_dataframe()
 
         self.data = build_quadtree_xugrid(
@@ -238,32 +239,6 @@ class SfincsGrid:
         lst[3] = lst[3] + buffer * dy
         return lst
 
-    def get_datashader_dataframe(self):
-        """Creates a dataframe with line elements for datashader"""
-        # Create a dataframe with line elements
-        x1 = self.data.grid.edge_node_coordinates[:,0,0]
-        x2 = self.data.grid.edge_node_coordinates[:,1,0]
-        y1 = self.data.grid.edge_node_coordinates[:,0,1]
-        y2 = self.data.grid.edge_node_coordinates[:,1,1]
-        # Check if grid crosses the dateline
-        cross_dateline = False
-        if self.model.crs.is_geographic:
-            if np.max(x1) > 180.0 or np.max(x2) > 180.0:
-                cross_dateline = True
-        transformer = Transformer.from_crs(self.model.crs,
-                                            3857,
-                                            always_xy=True)
-        x1, y1 = transformer.transform(x1, y1)
-        x2, y2 = transformer.transform(x2, y2)
-        if cross_dateline:
-            x1[x1 < 0] += 40075016.68557849
-            x2[x2 < 0] += 40075016.68557849
-        self.datashader_dataframe = pd.DataFrame(dict(x1=x1, y1=y1, x2=x2, y2=y2))
-
-    def clear_datashader_dataframe(self):
-        """Clears the datashader dataframe"""
-        self.datashader_dataframe = pd.DataFrame() 
-
     def map_overlay(self, file_name, xlim=None, ylim=None, color="black", width=800):
 
         if self.data is None:
@@ -271,7 +246,6 @@ class SfincsGrid:
             return False
 
         try:
-
             # Check if datashader dataframe is empty (maybe it was not made yet, or it was cleared)
             if self.datashader_dataframe.empty:
                 self.get_datashader_dataframe()
@@ -302,3 +276,30 @@ class SfincsGrid:
             return True
         except Exception as e:
             return False
+
+    def get_datashader_dataframe(self):
+        """Creates a dataframe with line elements for datashader"""
+        # Create a dataframe with line elements
+        x1 = self.data.grid.edge_node_coordinates[:,0,0]
+        x2 = self.data.grid.edge_node_coordinates[:,1,0]
+        y1 = self.data.grid.edge_node_coordinates[:,0,1]
+        y2 = self.data.grid.edge_node_coordinates[:,1,1]
+        # Check if grid crosses the dateline
+        cross_dateline = False
+        if self.model.crs.is_geographic:
+            if np.max(x1) > 180.0 or np.max(x2) > 180.0:
+                cross_dateline = True
+        transformer = Transformer.from_crs(self.model.crs,
+                                            3857,
+                                            always_xy=True)
+        x1, y1 = transformer.transform(x1, y1)
+        x2, y2 = transformer.transform(x2, y2)
+        if cross_dateline:
+            x1[x1 < 0] += 40075016.68557849
+            x2[x2 < 0] += 40075016.68557849
+        self.datashader_dataframe = pd.DataFrame(dict(x1=x1, y1=y1, x2=x2, y2=y2))
+
+    def clear_datashader_dataframe(self):
+        """Clears the datashader dataframe"""
+        self.datashader_dataframe = pd.DataFrame() 
+

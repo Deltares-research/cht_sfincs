@@ -143,6 +143,9 @@ class SfincsInput:
         lines = fid.readlines()
         fid.close()
         for line in lines:
+            # Remove everything from line starting with first #
+            if "#" in line:
+                line = line.split("#")[0]
             strings = line.split("=")
             if len(strings) == 1:
                 # Empty line

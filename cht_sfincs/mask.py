@@ -53,7 +53,7 @@ class SfincsMask:
             print("Building mask ...")
 
         # Initialize mask
-        nr_cells = len(self.model.grid.data.grid.face_coordinates)
+        nr_cells = self.model.grid.data.sizes["mesh2d_nFaces"]
         mask = np.zeros(nr_cells, dtype=np.int8)
         x, y = self.model.grid.face_coordinates()
         z    = self.model.grid.data["z"].values[:]
