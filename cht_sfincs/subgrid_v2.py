@@ -50,7 +50,6 @@ class SfincsSubgridTable:
         manning_land=0.04,
         manning_water=0.020,
         manning_level=1.0,
-        nr_bins=None,
         nr_levels=10,
         nr_subgrid_pixels=20,
         max_gradient=999.0,
