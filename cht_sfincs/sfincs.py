@@ -10,7 +10,7 @@ from pyproj import CRS
 
 from .input import SfincsInput
 
-from .subgrid import SfincsSubgridTable
+from .subgrid_v2 import SfincsSubgridTable
 from .quadtree import SfincsGrid
 from .mask import SfincsMask
 from .initial_conditions import SfincsInitialConditions
