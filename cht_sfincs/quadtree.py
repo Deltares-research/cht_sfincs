@@ -4,15 +4,12 @@ Created on Thu Apr 21 17:24:49 2022
 
 @author: ormondt
 """
-import time
 import os
 import numpy as np
-from matplotlib import path
 from pyproj import CRS, Transformer
 import shapely
-
-from shapely.geometry import Polygon
-from shapely.prepared import prep
+import rasterio
+from rasterio.transform import from_origin
 
 import xugrid as xu
 import xarray as xr
@@ -228,7 +225,7 @@ class SfincsGrid:
     def bounds(self, crs=None, buffer=0.0):
         """Returns list with bounds (lon1, lat1, lon2, lat2), with buffer (default 0.0) and in any CRS (default : same CRS as model)"""
         if crs is None:
-            crs = self.crs
+            crs = self.model.crs
         # Convert exterior gdf to WGS 84
         lst = self.exterior.to_crs(crs=crs).total_bounds.tolist()
         dx = lst[2] - lst[0]
@@ -303,3 +300,166 @@ class SfincsGrid:
         """Clears the datashader dataframe"""
         self.datashader_dataframe = pd.DataFrame() 
 
+    def get_indices_at_points(self, x, y):
+
+        x0 = self.data.attrs["x0"]
+        y0 = self.data.attrs["y0"]
+        dx = self.data.attrs["dx"]
+        dy = self.data.attrs["dy"]
+        nmax = self.data.attrs["nmax"]
+        mmax = self.data.attrs["mmax"]
+        rotation = self.data.attrs["rotation"]
+        nr_refinement_levels = self.data.attrs["nr_levels"]
+
+        nr_cells = len(self.data["level"])
+
+        cosrot = np.cos(-rotation * np.pi / 180)
+        sinrot = np.sin(-rotation * np.pi / 180)
+
+        # Now rotate around origin of SFINCS model
+        x00 = x - x0
+        y00 = y - y0
+        xg = x00 * cosrot - y00 * sinrot
+        yg = x00 * sinrot + y00 * cosrot
+
+        # Find index of first cell in each level
+        if not hasattr(self, "ifirst"):
+            ifirst = np.zeros(nr_refinement_levels, dtype=int)
+            for ilev in range(0, nr_refinement_levels):
+                # Find index of first cell with this level
+                ifirst[ilev] = np.where(self.data["level"].to_numpy()[:] == ilev + 1)[0][0]
+            self.ifirst = ifirst
+
+        ifirst = self.ifirst    
+
+        i0_lev = []
+        i1_lev = []
+        nmax_lev = []
+        mmax_lev = []
+        nm_lev = []
+
+        for level in range(nr_refinement_levels):
+
+            i0 = ifirst[level]
+            if level < nr_refinement_levels - 1:
+                i1 = ifirst[level + 1]
+            else:
+                i1 = nr_cells
+            i0_lev.append(i0)
+            i1_lev.append(i1)
+            nmax_lev.append(np.amax(self.data["n"].to_numpy()[i0:i1]) + 1)
+            mmax_lev.append(np.amax(self.data["m"].to_numpy()[i0:i1]) + 1)
+            nn = self.data["n"].to_numpy()[i0:i1] - 1
+            mm = self.data["m"].to_numpy()[i0:i1] - 1
+            nm_lev.append(mm * nmax_lev[level] + nn)
+
+        # Initialize index array
+        indx = np.full(np.shape(x), -999, dtype=int)
+
+        for ilev in range(nr_refinement_levels):
+            nmax = nmax_lev[ilev]
+            mmax = mmax_lev[ilev]
+            i0 = i0_lev[ilev]
+            i1 = i1_lev[ilev]
+            dxr = dx / 2**ilev
+            dyr = dy / 2**ilev
+            iind = np.floor(xg / dxr).astype(int)
+            jind = np.floor(yg / dyr).astype(int)
+            # Now check whether this cell exists on this level
+            ind = iind * nmax + jind
+            ind[iind < 0] = -999
+            ind[jind < 0] = -999
+            ind[iind >= mmax] = -999
+            ind[jind >= nmax] = -999
+
+            ingrid = np.isin(
+                ind, nm_lev[ilev], assume_unique=False
+            )  # return boolean for each pixel that falls inside a grid cell
+            incell = np.where(
+                ingrid
+            )  # tuple of arrays of pixel indices that fall in a cell
+
+            if incell[0].size > 0:
+                # Now find the cell indices
+                try:
+                    cell_indices = (
+                        binary_search(nm_lev[ilev], ind[incell[0], incell[1]])
+                        + i0_lev[ilev]
+                    )
+                    indx[incell[0], incell[1]] = cell_indices
+                except Exception:
+                    print("Error in binary search")
+                    pass
+
+        return indx
+
+    def make_index_cog(self, filename, dx=10.0):
+        """Make a COG file with indices of the quadtree grid cells."""
+
+        # Get the bounds of the grid
+        bounds = self.bounds()
+
+        x0 = bounds[0]
+        y0 = bounds[1]
+        x1 = bounds[2]
+        y1 = bounds[3]
+
+        # Round up and down to nearest dx
+        x0 = x0 - (x0 % dx)
+        x1 = x1 + (dx - x1 % dx)
+        y0 = y0 - (y0 % dx)
+        y1 = y1 + (dx - y1 % dx)
+
+        xx = np.arange(x0, x1, dx)
+        yy = np.arange(y1, y0, -dx)
+        ii = np.empty((len(yy), len(xx),), dtype=np.uint32)
+
+        # Create empty ds
+        ds = xr.Dataset(
+            {
+                "index": (["y", "x"], ii),
+            },
+            coords={
+                "x": xx,
+                "y": yy,
+            },
+        )
+
+        # Go through refinement levels in grid
+        xx, yy = np.meshgrid(xx, yy)
+        indices = self.get_indices_at_points(xx, yy)
+
+        # Fill the array with indices
+        ii[:, :] = indices
+
+        # Write first to netcdf
+        ds.to_netcdf("index.nc")
+
+        # And now to cog
+        with rasterio.open(
+            filename,
+            "w",
+            driver="COG",
+            height=ii.shape[0],
+            width=ii.shape[1],
+            count=1,
+            dtype=ii.dtype,
+            crs=self.model.crs,
+            transform=from_origin(x0, y1, dx, dx),
+        ) as dst:
+            dst.write(ii, 1)
+
+
+def binary_search(val_array, vals):
+    indx = np.searchsorted(val_array, vals)  # ind is size of vals
+    not_ok = np.where(indx == len(val_array))[
+        0
+    ]  # size of vals, points that are out of bounds
+    indx[np.where(indx == len(val_array))[0]] = (
+        0  # Set to zero to avoid out of bounds error
+    )
+    is_ok = np.where(val_array[indx] == vals)[0]  # size of vals
+    indices = np.zeros(len(vals), dtype=int) - 1
+    indices[is_ok] = indx[is_ok]
+    indices[not_ok] = -1
+    return indices
