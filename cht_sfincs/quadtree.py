@@ -396,6 +396,8 @@ class SfincsGrid:
     def make_index_cog(self, filename, dx=10.0):
         """Make a COG file with indices of the quadtree grid cells."""
 
+        nodata = 2147483647
+
         # Get the bounds of the grid
         bounds = self.bounds()
 
@@ -424,18 +426,21 @@ class SfincsGrid:
                 "y": yy,
             },
         )
+        # Set no data value in ds
+        ds["index"].attrs["_FillValue"] = nodata
 
         # Go through refinement levels in grid
         xx, yy = np.meshgrid(xx, yy)
         indices = self.get_indices_at_points(xx, yy)
+        indices[np.where(indices == -999)] = nodata
 
         # Fill the array with indices
-        ii[:, :] = indices
+        ii[:, :] = indices        
 
         # Write first to netcdf
         ds.to_netcdf("index.nc")
 
-        # And now to cog
+        # And now to cog (use -999 as the nodata value)
         with rasterio.open(
             filename,
             "w",
@@ -446,6 +451,7 @@ class SfincsGrid:
             dtype=ii.dtype,
             crs=self.model.crs,
             transform=from_origin(x0, y1, dx, dx),
+            nodata=nodata,
         ) as dst:
             dst.write(ii, 1)
 
