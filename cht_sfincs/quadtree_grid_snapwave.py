@@ -42,7 +42,7 @@ def snapwave_quadtree2mesh(qtr, file_name=None):
     #
     # STEP 1 - Read quadtree file
     #
-    nr_cells = qtr.nr_cells
+    nr_cells = len(nr_cells = len(qtr.data.mesh2d_nFaces))
 
     mask2 = np.zeros(nr_cells, dtype=int) + 1
 

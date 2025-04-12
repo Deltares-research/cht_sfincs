@@ -6,3 +6,4 @@ Created on Sun Apr 25 10:58:08 2021
 """
 
 from .sfincs import SFINCS
+from .flood_map import FloodMap

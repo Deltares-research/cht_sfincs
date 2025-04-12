@@ -46,7 +46,8 @@ class SnapWaveMask:
         if not quiet:
             print("Building SnapWave mask ...")
 
-        mask = np.zeros(self.model.grid.nr_cells, dtype=np.int8)
+        nr_cells = len(self.model.grid.data.mesh2d_nFaces)
+        mask = np.zeros(nr_cells, dtype=np.int8)
         x, y = self.model.grid.face_coordinates()
         z = self.model.grid.data["z"] 
 

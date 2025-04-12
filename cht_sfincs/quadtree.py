@@ -10,6 +10,7 @@ from pyproj import CRS, Transformer
 import shapely
 import rasterio
 from rasterio.transform import from_origin
+from rasterio.enums import Resampling
 
 import xugrid as xu
 import xarray as xr
@@ -393,10 +394,13 @@ class SfincsGrid:
 
         return indx
 
-    def make_index_cog(self, filename, dx=10.0):
-        """Make a COG file with indices of the quadtree grid cells."""
-
-        nodata = 2147483647
+    def make_topobathy_cog(self,
+                           filename,
+                           bathymetry_sets,
+                           bathymetry_database=None,
+                           dx=10.0):
+        
+        """Make a COG file with topobathy. Now only works for projected coordinates. This always make the topobathy COG in the same projection as the model."""
 
         # Get the bounds of the grid
         bounds = self.bounds()
@@ -412,22 +416,99 @@ class SfincsGrid:
         y0 = y0 - (y0 % dx)
         y1 = y1 + (dx - y1 % dx)
 
-        xx = np.arange(x0, x1, dx)
-        yy = np.arange(y1, y0, -dx)
+        xx = np.arange(x0, x1, dx) + 0.5 * dx
+        yy = np.arange(y1, y0, -dx) - 0.5 * dx
+        zz = np.empty((len(yy), len(xx),), dtype=np.float32)
+
+        xx, yy = np.meshgrid(xx, yy)
+        zz = bathymetry_database.get_bathymetry_on_points(xx,
+                                                          yy,
+                                                          dx,
+                                                          self.model.crs,
+                                                          bathymetry_sets)
+
+        # And now to cog (use -999 as the nodata value)
+        with rasterio.open(
+            filename,
+            "w",
+            driver="COG",
+            height=zz.shape[0],
+            width=zz.shape[1],
+            count=1,
+            dtype=zz.dtype,
+            crs=self.model.crs,
+            transform=from_origin(x0, y1, dx, dx),
+            nodata=-999.0,
+        ) as dst:
+            dst.write(zz, 1)
+
+    def make_index_cog(self, filename, filename_topobathy):
+    # def make_index_cog(self, filename, dx=10.0):
+        """Make a COG file with indices of the quadtree grid cells."""
+
+        # Read coordinates from topobathy file
+        with rasterio.open(filename_topobathy) as src:
+            # Get the bounds of the grid
+            bounds = src.bounds
+            dx = src.res[0]
+            # Get the CRS of the grid
+            self.model.crs = src.crs
+            # Get the nodata value
+            nodata = src.nodata
+            # Get the transform of the grid
+            transform = src.transform
+            # Get the width and height of the grid
+            width = src.width
+            height = src.height
+
+        # Now create numpy arrays with the coordinates of geotiff
+        # Get the coordinates of the grid
+        x0 = bounds.left
+        y0 = bounds.bottom
+        x1 = bounds.right
+        y1 = bounds.top
+
+        # # Round up and down to nearest dx
+        # x0 = x0 - (x0 % dx)
+        # x1 = x1 + (dx - x1 % dx)
+        # y0 = y0 - (y0 % dx)
+        # y1 = y1 + (dx - y1 % dx)
+
+        xx = np.arange(x0, x1, dx) + 0.5 * dx
+        yy = np.arange(y1, y0, -dx) - 0.5 * dx
+
+        nodata = 2147483647
+
+        # # # Get the bounds of the grid
+        # # bounds = self.bounds()
+
+        # x0 = bounds[0]
+        # y0 = bounds[1]
+        # x1 = bounds[2]
+        # y1 = bounds[3]
+
+        # # Round up and down to nearest dx
+        # x0 = x0 - (x0 % dx)
+        # x1 = x1 + (dx - x1 % dx)
+        # y0 = y0 - (y0 % dx)
+        # y1 = y1 + (dx - y1 % dx)
+
+        xx = np.arange(x0, x1, dx) + 0.5 * dx
+        yy = np.arange(y1, y0, -dx) - 0.5 * dx
         ii = np.empty((len(yy), len(xx),), dtype=np.uint32)
 
-        # Create empty ds
-        ds = xr.Dataset(
-            {
-                "index": (["y", "x"], ii),
-            },
-            coords={
-                "x": xx,
-                "y": yy,
-            },
-        )
-        # Set no data value in ds
-        ds["index"].attrs["_FillValue"] = nodata
+        # # Create empty ds
+        # ds = xr.Dataset(
+        #     {
+        #         "index": (["y", "x"], ii),
+        #     },
+        #     coords={
+        #         "x": xx,
+        #         "y": yy,
+        #     },
+        # )
+        # # Set no data value in ds
+        # ds["index"].attrs["_FillValue"] = nodata
 
         # Go through refinement levels in grid
         xx, yy = np.meshgrid(xx, yy)
@@ -437,21 +518,22 @@ class SfincsGrid:
         # Fill the array with indices
         ii[:, :] = indices        
 
-        # Write first to netcdf
-        ds.to_netcdf("index.nc")
+        # # Write first to netcdf
+        # ds.to_netcdf("index.nc")
 
         # And now to cog (use -999 as the nodata value)
         with rasterio.open(
             filename,
             "w",
             driver="COG",
-            height=ii.shape[0],
-            width=ii.shape[1],
+            height=height,
+            width=width,
             count=1,
             dtype=ii.dtype,
             crs=self.model.crs,
-            transform=from_origin(x0, y1, dx, dx),
+            transform=transform,
             nodata=nodata,
+            overview_resampling=Resampling.nearest,
         ) as dst:
             dst.write(ii, 1)
 

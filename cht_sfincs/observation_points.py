@@ -66,7 +66,7 @@ class SfincsObservationPoints:
                 x = row["geometry"].coords[0][0]
                 y = row["geometry"].coords[0][1]
                 name = row["name"]
-                string = f'{x:12.1f}{y:12.1f}  "{name}"\n'
+                string = f'{x:12.1f}{y:12.2f}  "{name}"\n'
                 fid.write(string)
             fid.close()
 
