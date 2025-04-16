@@ -116,6 +116,9 @@ class SfincsGrid:
         ugrid2d = self.data.grid
         self.data["z"] = xu.UgridDataArray(xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d)
 
+    def set_uniform_bathymetry(self, zb):
+        self.data["z"][:] = zb
+
     def set_bathymetry(self, bathymetry_sets, bathymetry_database=None, zmin=-1.0e9, zmax=1.0e9, quiet=True):
         
         if bathymetry_database is None:

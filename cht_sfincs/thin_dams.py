@@ -43,6 +43,18 @@ class SfincsThinDams:
         thin_dam.set_crs(self.model.crs)
         self.gdf = pd.concat([self.gdf, thin_dam], ignore_index=True)
 
+    def add_xy(self, x, y):
+        # Add a thin dam by providing x and y coordinates
+        # x and y are lists of the same length
+        # Create linestring geometry
+        if len(x) != len(y):
+            raise ValueError("x and y must be the same length")
+        thin_dam = gpd.GeoDataFrame(geometry=[shapely.geometry.LineString(zip(x, y))],
+                                    crs=self.model.crs)
+        # Create a new row in the gdf
+        self.gdf = pd.concat([self.gdf, thin_dam], ignore_index=True)
+
+
     def delete(self, index):
         if len(self.gdf.index) < index + 1:
             print("Index exceeds length!")    
