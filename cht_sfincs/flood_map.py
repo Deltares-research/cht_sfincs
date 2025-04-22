@@ -37,7 +37,8 @@ class FloodMap:
         self.hmin = 0.1
         self.max_pixel_size = 0.0
         self.data_array_name = "water_depth"
-        self.cmap = "jet"
+        # self.cmap = "jet"
+        self.cmap = None
         self.cmin = None
         self.cmax = None
         self.ds = xr.Dataset()
