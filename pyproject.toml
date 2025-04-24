@@ -21,4 +21,5 @@ dependencies = [ "numpy",
 				 "geopandas",
 				 "pyproj",
 				 "xugrid",
-				 "tabulate",]
+				 "tabulate",
+				 "xmipy",]

@@ -7,15 +7,9 @@ import pathlib as pl
 from scipy.interpolate import RegularGridInterpolator
 import numpy as np
 from ctypes import (
-    CDLL,
-    POINTER,
     byref,
-    c_char,
-    c_char_p,
     c_double,
     c_int,
-    c_void_p,
-    create_string_buffer,
 )
 
 from xmipy import XmiWrapper
