@@ -77,6 +77,7 @@ class SfincsXmi(XmiWrapper):
                       x=None,
                       y=None,
                       z=None,
+                      zb0=None, # If zb0 is provided, the values in z will be added to zb0, otherwise, the values in z will be used directly
                       update_water_level=False):
         """x, y, z are the coordinates of the new bed level (numpy arrays), that will be interpolated to the grid"""
 
@@ -86,6 +87,13 @@ class SfincsXmi(XmiWrapper):
 
         # New bed level z 
         zb = interp2(x, y, z, self.xz, self.yz)
+
+        # Replace NaNs in zb with zeros
+        zb[np.isnan(zb)] = 0.0
+
+        if zb0 is not None:
+            # Make a copy of zb0
+            zb = zb0[:].copy() + zb 
 
         # Difference w.r.t. previous time step
         dzb = zb - self.zb
@@ -141,11 +149,6 @@ class SfincsXmi(XmiWrapper):
         area = c_double(0.0)
         self._execute_function(self.lib.get_sfincs_cell_area, byref(c_int(index + 1)), byref(area))
         return area.value
-
-    def get_cell_coordinates(self):
-        self.xz = xy[:, 0]
-        self.yz = xy[:, 1]
-
 
     def update_water_level(self, t):
         pass
