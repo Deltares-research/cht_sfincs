@@ -9,11 +9,13 @@ from pyproj import Transformer
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 # from rasterio.enums import Resampling as RioResampling
 from rasterio.windows import from_bounds
+from matplotlib.colors import ListedColormap, BoundaryNorm
+from matplotlib.patches import Patch
+import contextily as ctx
 
 
 class FloodMap:
     def __init__(self):
-    # def __init__(self, topobathy_file: Union[str, Path], index_file: Union[str, Path]):
         """
         Initialize the FloodMap class with topobathy data, and indices.
 
@@ -66,6 +68,23 @@ class FloodMap:
         """
         self.index_file = index_file
         self.indices = rasterio.open(self.index_file)
+
+    def close(self) -> None:
+        """
+        Close the topobathy and index files.
+        """
+        if self.zb is not None:
+            self.zb.close()
+        if self.indices is not None:
+            self.indices.close()
+        self.ds.close()    
+
+    def read(self, tiffile) -> None:
+        """
+        Read geotiff file with flood depth data.
+        """
+        self.ds = xr.Dataset()
+        self.ds["water_depth"] = rioxarray.open_rasterio(tiffile, masked=True).squeeze()
 
     def set_water_level(self, zs: Union[float, np.ndarray]) -> None:
         """
@@ -209,42 +228,6 @@ class FloodMap:
                     self.ds[self.data_array_name], cmap=self.cmap, cmin=self.cmin, cmax=self.cmax
                 )
 
-                # # Load and squeeze to 2D if needed
-                # da = self.ds[self.data_array_name].squeeze()
-
-                # if cmin is None:
-                #     cmin = da.min()
-                # if cmax is None:
-                #     cmax = da.max()
-                # # Ensure cmin and cmax are not equal to avoid division by zero
-                # if cmin == cmax:
-                #     cmin = cmax - 1.0
-                #     cmax = cmax + 1.0
-
-                # # Normalize to [0, 1]
-                # normed = (da - cmin) / (cmax - cmin)
-
-                # # Get colormap
-                # cmap = plt.get_cmap(cmap)
-
-                # # Apply colormap (returns RGBA)
-                # rgba = cmap(normed)
-
-                # # Convert to 8-bit RGB and drop alpha
-                # rgb = (rgba[:, :, :3] * 255).astype("uint8")
-
-                # # Convert to DataArray with 'band' dimension
-                # rgb_da = xr.DataArray(
-                #     np.moveaxis(rgb, -1, 0),  # shape: (3, height, width)
-                #     dims=("band", "y", "x"),
-                #     coords={"band": [1, 2, 3], "y": da.y, "x": da.x},
-                #     attrs=da.attrs,
-                # )
-
-                # # Add CRS and transform
-                # rgb_da.rio.write_crs(da.rio.crs, inplace=True)
-                # rgb_da.rio.write_transform(da.rio.transform(), inplace=True)
-
                 # Write to file
                 rgb_da.rio.to_raster(
                     output_file,
@@ -320,6 +303,154 @@ class FloodMap:
         except Exception as e:
             return False
 
+    def plot(self, pngfile,
+             zoom=None,
+             title="Flood Depth (m)",
+             color_values=None,
+             cmap="Blues",
+             vmin=0.0,
+             vmax=5.0,
+             lon_lim=None,
+             lat_lim=None,
+             width=10.0,
+             background="EsriWorldImagery") -> None:
+        """
+        Plot the flood map using matplotlib and save it to a PNG file.
+
+        Parameters:
+        ----------
+        pngfile : str
+            Path to the output PNG file.
+        zoom : int, optional
+            Zoom level for the map. Default is None.
+        title : str, optional
+            Title of the plot. Default is "Flood Depth (m)".
+        color_values : list, optional
+            List of dictionaries containing color values and ranges for discrete colors. Default is None.
+        cmap : str, optional
+            Colormap to use for continuous colors. Default is "Blues".
+        vmin : float, optional
+            Minimum value for color mapping. Default is 0.0.
+        vmax : float, optional
+            Maximum value for color mapping. Default is 5.0.
+        lon_lim : list, optional
+            Longitude limits for the plot. Default is None.
+        lat_lim : list, optional
+            Latitude limits for the plot. Default is None.
+        width : float, optional
+            Width of the plot in inches. Default is 10.0.
+        """
+        
+        if lon_lim is None or lat_lim is None:
+            lon_min = self.ds.x.min().values
+            lat_min = self.ds.y.min().values
+            lon_max = self.ds.x.max().values
+            lat_max = self.ds.y.max().values
+            # Use CRS of the data
+            crs = self.ds[self.data_array_name].rio.crs    
+            transformer = Transformer.from_crs(crs, "EPSG:3857", always_xy=True)
+            x_min, y_min = transformer.transform(lon_min, lat_min)
+            x_max, y_max = transformer.transform(lon_max, lat_max)
+        else:
+            # Reproject bbox to EPSG:3857
+            transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+            x_min, y_min = transformer.transform(lon_lim[0], lat_lim[0])
+            x_max, y_max = transformer.transform(lon_lim[1], lat_lim[1])
+
+        # Reproject to Web Mercator (EPSG:3857)
+        da_3857 = self.ds[self.data_array_name].rio.reproject("EPSG:3857")
+
+        if color_values is None:
+            discrete_colors = False
+        else:
+            discrete_colors = True
+            if isinstance(color_values, str):
+                # Use default
+                color_values = []
+                color_values.append({"color": "lightgreen", "lower_value": 0.1, "upper_value": 0.3})
+                color_values.append({"color": "yellow", "lower_value": 0.3, "upper_value": 1.0})
+                color_values.append({"color": "#FFA500", "lower_value": 1.0, "upper_value": 2.0})
+                color_values.append({"color": "red", "lower_value": 2.0})
+
+        # Set up the figure
+        aspect_ratio = (y_max - y_min) / (x_max - x_min)
+        fig, ax = plt.subplots(figsize=(width, aspect_ratio * width))
+
+        if discrete_colors:
+
+            masked = da_3857.where(da_3857 >= color_values[0]["lower_value"])
+
+            classified = xr.full_like(masked, np.nan)
+            colors = []
+            labels = []
+            for icolor, color_value in enumerate(color_values):
+                if "upper_value" in color_value:
+                    lv = color_value["lower_value"]
+                    uv = color_value["upper_value"]
+                    classified = classified.where(~((masked > lv) & (masked <= uv)), icolor + 1)
+                    labels.append(f"{lv}–{uv} m")
+                else:
+                    lv = color_value["lower_value"]
+                    classified = classified.where(~((masked > lv)), icolor + 1)
+                    labels.append(f">{lv} m")
+                colors.append(color_value["color"])    
+
+            # Discrete colormap
+            cmap = ListedColormap(colors)
+            # bounds is list from 1 to len(colors) + 1
+            # e.g. [1, 2, 3, 4, 5] for 4 colors
+            bounds = [i for i in range(1, len(colors) + 2)]
+
+            norm = BoundaryNorm(bounds, cmap.N)
+
+            # Plot using xarray's built-in plotting
+            classified.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
+
+            # Custom legend
+            legend_elements = []        
+            for i, color_value in enumerate(color_values):
+                    legend_elements.append(Patch(facecolor=color_value["color"], label=labels[i]))
+            plt.legend(handles=legend_elements, title="Flood Depth", loc="lower right")
+
+        else:
+
+            # Plot the water depth
+            da_3857.plot(
+                ax=ax,
+                cmap=cmap,
+                vmin=vmin, vmax=vmax,
+                add_colorbar=True,
+                cbar_kwargs={"label": "Flood Depth (m)"},
+                alpha=0.75  # semi-transparent        
+            )
+
+        # Add OpenStreetMap basemap
+        if background.lower() == "osm":
+            if zoom is None:
+                ctx.add_basemap(ax, crs=da_3857.rio.crs, source=ctx.providers.OpenStreetMap.Mapnik)
+            else:
+                ctx.add_basemap(ax, crs=da_3857.rio.crs, source=ctx.providers.OpenStreetMap.Mapnik, zoom=zoom)
+        else:
+            if zoom is None:
+                ctx.add_basemap(ax, crs=da_3857.rio.crs, source=ctx.providers.Esri.WorldImagery)
+            else:
+                ctx.add_basemap(ax, crs=da_3857.rio.crs, source=ctx.providers.Esri.WorldImagery, zoom=zoom)
+
+        # # Add scalebar (in meters)
+        # scalebar = ScaleBar(1, units="m", location="lower left")  # scale=1 since coords are in meters
+        # ax.add_artist(scalebar)
+
+        # Zoom to bbox
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+
+        # Clean layout
+        ax.set_axis_off()
+        plt.title(title)
+
+        # Save to PNG
+        plt.tight_layout()
+        plt.savefig(pngfile, dpi=300, bbox_inches='tight', pad_inches=0.1)
 
 
 def get_appropriate_overview_level(

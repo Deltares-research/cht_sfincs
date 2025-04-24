@@ -306,6 +306,13 @@ class SfincsGrid:
 
     def get_indices_at_points(self, x, y):
 
+        # x and y are 2D arrays of coordinates (x, y) in the same projection as the model
+        # if x is a float, convert to 2D array
+        if np.ndim(x) == 0:
+            x = np.array([[x]])
+        if np.ndim(y) == 0:
+            y = np.array([[y]])
+
         x0 = self.data.attrs["x0"]
         y0 = self.data.attrs["y0"]
         dx = self.data.attrs["dx"]
