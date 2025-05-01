@@ -68,6 +68,11 @@ class SfincsGrid:
         ds.to_netcdf(file_name)
         ds.close()
 
+        # Check if "snapwave.upw" is in this folder. If so, delete it.
+        snapwave_file = os.path.join(self.model.path, "snapwave.upw")
+        if os.path.exists(snapwave_file):
+            os.remove(snapwave_file)
+
     def build(self,
               x0,
               y0,

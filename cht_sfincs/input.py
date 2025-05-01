@@ -57,12 +57,14 @@ class Variables:
         self.gapres = 101200.0
         self.advlim = 9999.9
         self.stopdepth = 1000.0
+        self.rugdepth = 0.01
         self.crsgeo = False
         self.epsg = None
         self.wiggle_suppression = False
         self.storevel = False
         self.storemeteo = False
         self.store_dynamic_bed_level = False
+        self.nonh = False
         self.utmzone = None
 
         self.sbgfile = None
@@ -95,6 +97,7 @@ class Variables:
         self.precipfile = None
         self.obsfile = None
         self.crsfile = None
+        self.rugfile = None
         self.thdfile = None
         self.manningfile = None
         self.scsfile = None
@@ -119,7 +122,7 @@ class Variables:
         self.snapwave_crit        = 0.01
         self.snapwave_igwaves     = True
         self.snapwave_nrsweeps    = 1
-        self.storefw              = True
+        self.storefw              = False
 
         self.inputformat = "bin"
         self.outputformat = "net"
@@ -247,7 +250,7 @@ class SfincsInput:
             variables.snapwave_dtheta      = None
             variables.snapwave_hmin        = None
             variables.snapwave_fw0         = None
-            variables.bwvfile              = None
+            variables.bndfile              = None
             variables.bhsfile              = None
             variables.btpfile              = None
             variables.bwdfile              = None
@@ -266,6 +269,9 @@ class SfincsInput:
             variables.manning_land         = None
             variables.manning_sea          = None
             variables.rgh_lev_land         = None
+
+        if variables.rugfile is None:
+            variables.rugdepth = None
 
         if not variables.store_dynamic_bed_level:
             variables.store_dynamic_bed_level = None

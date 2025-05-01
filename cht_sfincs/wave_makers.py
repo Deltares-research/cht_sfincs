@@ -30,6 +30,11 @@ class SfincsWaveMakers:
         file_name = os.path.join(self.model.path, self.model.input.variables.wvmfile)
         gdf2pli(self.gdf, file_name)
 
+    def add_xy(self, x, y):
+        # x and y are lists of coordinates
+        gdf = gpd.GeoDataFrame({"geometry": [shapely.geometry.LineString(zip(x, y))]}).set_crs(self.model.crs)
+        self.gdf = pd.concat([self.gdf, gdf], ignore_index=True)
+
     def add_point(self, gdf_to_add):
         pass
         # point = shapely.geometry.Point(x, y)

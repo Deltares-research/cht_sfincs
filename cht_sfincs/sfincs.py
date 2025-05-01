@@ -17,6 +17,7 @@ from .initial_conditions import SfincsInitialConditions
 from .boundary_conditions import SfincsBoundaryConditions
 from .observation_points import SfincsObservationPoints
 from .cross_sections import SfincsCrossSections
+from .runup_gauges import SfincsRunupGauges
 from .discharge_points import SfincsDischargePoints
 from .thin_dams import SfincsThinDams
 from .weirs import SfincsWeirs
@@ -52,6 +53,7 @@ class SFINCS:
         self.wave_makers              = SfincsWaveMakers(self)
         self.snapwave                 = SfincsSnapWave(self)
         self.cross_sections           = SfincsCrossSections(self)
+        self.runup_gauges             = SfincsRunupGauges(self)
         self.discharge_points         = SfincsDischargePoints(self)
         self.thin_dams                = SfincsThinDams(self)
         self.weirs                    = SfincsWeirs(self)
@@ -122,6 +124,9 @@ class SFINCS:
         # Cross sections
         self.cross_sections.read()
 
+        # Runup gauges
+        self.runup_gauges.read()
+
         # Thin dams
         self.thin_dams.read()
 
@@ -154,6 +159,8 @@ class SFINCS:
         self.observation_points.write()
         # Cross sections
         self.cross_sections.write()
+        # Runup gauges
+        self.runup_gauges.write()
         # Thin dams
         self.thin_dams.write()
         # Weirs
@@ -179,6 +186,8 @@ class SFINCS:
         self.subgrid              = SfincsSubgridTable(self)
         self.boundary_conditions  = SfincsBoundaryConditions(self)
         self.observation_points   = SfincsObservationPoints(self)
+        self.cross_sections       = SfincsCrossSections(self)
+        self.runup_gauges         = SfincsRunupGauges(self)
         self.thin_dams            = SfincsThinDams(self)
         self.weirs                = SfincsWeirs(self)
         self.wave_makers          = SfincsWaveMakers(self)

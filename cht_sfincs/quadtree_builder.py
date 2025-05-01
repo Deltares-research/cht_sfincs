@@ -249,7 +249,7 @@ class QuadtreeGrid:
             # Find indices all cells to be refined
             ind_ref = binary_search(nm_level, nm_in)
 
-            ind_ref=ind_ref[ind_ref>=0]
+            ind_ref = ind_ref[ind_ref>=0]
 
             # ind_ref = ind_ref[ind_ref < np.size(nm_level)]
             if not np.any(ind_ref):
@@ -631,10 +631,16 @@ class QuadtreeGrid:
         self.ilast = np.zeros(self.nr_refinement_levels, dtype=int)
         for ilev in range(0, self.nr_refinement_levels):
             # Find index of first cell with this level
-            self.ifirst[ilev] = np.where(self.level == ilev)[0][0]
+            ifirst = np.where(self.level == ilev)[0]
+            if ifirst.size == 0:
+                self.ifirst[ilev] = -1
+            else:
+                self.ifirst[ilev] = ifirst[0]
+            #self.ifirst[ilev] = np.where(self.level == ilev)[0][0]
             # Find index of last cell with this level
             if ilev<self.nr_refinement_levels - 1:
-                self.ilast[ilev] = np.where(self.level == ilev + 1)[0][0] - 1
+                # self.ilast[ilev] = np.where(self.level == ilev + 1)[0][0] - 1
+                self.ilast[ilev] = np.where(self.level > ilev)[0][0] - 1
             else:
                 self.ilast[ilev] = self.nr_cells - 1
 
