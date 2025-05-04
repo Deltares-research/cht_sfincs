@@ -451,6 +451,8 @@ class SfincsMask:
                     ylim=None,
                     active_color="yellow",
                     boundary_color="red",
+                    downstream_color="blue",
+                    neumann_color="purple",
                     outflow_color="green",
                     px=2,
                     width=800):
@@ -494,10 +496,14 @@ class SfincsMask:
             dfact = self.datashader_dataframe[self.datashader_dataframe["mask"]==1]
             dfbnd = self.datashader_dataframe[self.datashader_dataframe["mask"]==2]
             dfout = self.datashader_dataframe[self.datashader_dataframe["mask"]==3]
+            dfneu = self.datashader_dataframe[self.datashader_dataframe["mask"]==5]
+            dfdwn = self.datashader_dataframe[self.datashader_dataframe["mask"]==6]
             img_a = tf.shade(tf.spread(cvs.points(dfact, 'x', 'y', ds.any()), px=px), cmap=active_color)
             img_b = tf.shade(tf.spread(cvs.points(dfbnd, 'x', 'y', ds.any()), px=px), cmap=boundary_color)
             img_o = tf.shade(tf.spread(cvs.points(dfout, 'x', 'y', ds.any()), px=px), cmap=outflow_color)
-            img   = tf.stack(img_a, img_b, img_o)
+            img_n = tf.shade(tf.spread(cvs.points(dfneu, 'x', 'y', ds.any()), px=px), cmap=neumann_color)
+            img_d = tf.shade(tf.spread(cvs.points(dfdwn, 'x', 'y', ds.any()), px=px), cmap=downstream_color)
+            img   = tf.stack(img_a, img_b, img_o, img_n, img_d)
 
             path = os.path.dirname(file_name)
             if not path:
