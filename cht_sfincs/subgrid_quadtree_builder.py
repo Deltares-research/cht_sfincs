@@ -29,6 +29,7 @@ def build_subgrid_table_quadtree(
     zmin=-999999.0,
     zmax=999999.0,
     weight_option="min",
+    roughness_type="manning",
     bathymetry_database=None,
     quiet=True,
     progress_bar=None,
@@ -52,6 +53,7 @@ def build_subgrid_table_quadtree(
         zmin,
         zmax,
         weight_option,
+        roughness_type,
         bathymetry_database,
         quiet,
         progress_bar,
@@ -81,6 +83,7 @@ class SubgridTableQuadtree:
         zmin,
         zmax,
         weight_option,
+        roughness_type,
         bathymetry_database,
         quiet,
         progress_bar,
@@ -646,6 +649,7 @@ class SubgridTableQuadtree:
                         nr_levels,  # number of levels
                         huthresh,  # huthresh
                         weight_option,  # weight option ("min" or "mean")
+                        roughness_type
                     )
 
                     if progress_bar:
@@ -779,6 +783,7 @@ def process_block_uv_points(
     nr_levels,  # number of levels
     huthresh,  # huthresh
     weight_option,  # weight option
+    roughness_type,  # roughness type (manning or chezy)
 ):
     """calculate subgrid properties for a single block of uv points"""
 
@@ -852,6 +857,7 @@ def process_block_uv_points(
             z_zmin_nm[ip],
             z_zmin_nmu[ip],
             weight_option,
+            roughness_type
         )
 
         uv_zmin[ip] = zmin
@@ -962,26 +968,28 @@ def subgrid_v_table(
 @njit
 def subgrid_q_table(
     elevation: np.ndarray,
-    manning: np.ndarray,
+    rgh: np.ndarray,
     nr_levels: int,
     huthresh: float,
     option: int = 2,
     z_zmin_a: float = -99999.0,
     z_zmin_b: float = -99999.0,
     weight_option: str = "min",
+    roughness_type: str = "manning",
 ):
     """
     map vector of elevation values into a hypsometric hydraulic radius - depth relationship for one u/v point
     Parameters
     ----------
     elevation : np.ndarray (nr of pixels in one cell) containing subgrid elevation values for one grid cell [m]
-    manning : np.ndarray (nr of pixels in one cell) containing subgrid manning roughness values for one grid cell [s m^(-1/3)]
+    rgh : np.ndarray (nr of pixels in one cell) containing subgrid roughness values for one grid cell [s m^(-1/3)]
     nr_levels : int, number of vertical levels [-]
     huthresh : float, threshold depth [m]
     option : int, option to use "old" or "new" method for computing conveyance depth at u/v points
     z_zmin_a : float, elevation of lowest pixel in neighboring cell A [m]
     z_zmin_b : float, elevation of lowest pixel in neighboring cell B [m]
     weight_option : str, weight of q between sides A and B ("min" or "mean")
+    roughness_type : str, "manning" or "chezy"
 
     Returns
     -------
@@ -1001,13 +1009,16 @@ def subgrid_q_table(
     zz = np.zeros(nr_levels)
 
     n = int(np.size(elevation))  # Nr of pixels in grid cell
+    # print(f"n = {n}")
+    # print(f"n05 = {int(n/2)}")
     n05 = int(n / 2)  # Nr of pixels in half grid cell
+    # print(f"n05 = {n05}")
 
     # Sort elevation and manning values by side A and B
     dd_a = elevation[0:n05]
     dd_b = elevation[n05:]
-    manning_a = manning[0:n05]
-    manning_b = manning[n05:]
+    rgh_a = rgh[0:n05]
+    rgh_b = rgh[n05:]
 
     # Ensure that pixels are at least as high as the minimum elevation in the neighbouring cells
     # This should always be the case, but there may be errors in the interpolation to the subgrid pixels
@@ -1022,13 +1033,15 @@ def subgrid_q_table(
 
     # Add huthresh to zmin
     zmin = max(zmin_a, zmin_b) + huthresh
-    zmax = max(zmax_a, zmax_b)
+    zmax = float(max(zmax_a, zmax_b))
 
     # Make sure zmax is at least 0.01 m higher than zmin
     zmax = max(zmax, zmin + 0.01)
 
     # Determine bin size
+    # print("nr_levels -1= ", nr_levels -1)
     dlevel = (zmax - zmin) / (nr_levels - 1)
+    # print("dlevel = ", dlevel)
 
     # Option can be either 1 ("old") or 2 ("new")
     # Should never use option 1 !
@@ -1043,18 +1056,40 @@ def subgrid_q_table(
 
         h = np.maximum(zbin - elevation, 0.0)  # water depth in each pixel
 
-        # Side A
         h_a = np.maximum(
             zbin - dd_a, 0.0
         )  # Depth of all pixels (but set min pixel height to zbot). Can be negative, but not zero (because zmin = zbot + huthresh, so there must be pixels below zb).
+        h_b = np.maximum(
+            zbin - dd_b, 0.0
+        )  # Depth of all pixels (but set min pixel height to zbot). Can be negative, but not zero (because zmin = zbot + huthresh, so there must be pixels below zb).
+
+        # # print min of rgh_a, rgh_b, rgh
+        # print("rgh_a = ", np.min(rgh_a))
+        # print("rgh_b = ", np.min(rgh_b))
+        # print("rgh = ", np.min(rgh))    
+
+        if roughness_type == "manning":
+            manning_a = rgh_a
+            manning_b = rgh_b
+            manning   = rgh
+        elif roughness_type == "chezy":
+            manning_a = (1.0 / rgh_a) * h_a ** (1.0 / 6.0)
+            manning_b = (1.0 / rgh_b) * h_b ** (1.0 / 6.0)
+            manning   = (1.0 / rgh) * h ** (1.0 / 6.0)
+            manning_a = np.maximum(manning_a, 0.001)  # Set minimum value to avoid division by zero
+            manning_b = np.maximum(manning_b, 0.001)  # Set minimum value to avoid division by zero
+            manning   = np.maximum(manning, 0.001)  # Set minimum value to avoid division by zero
+
+        # print("manning_a = ", np.min(manning_a))
+        # print("manning_b = ", np.min(manning_b))
+        # print("manning = ", np.min(manning))    
+
+        # Side A
         q_a = h_a ** (5.0 / 3.0) / manning_a  # Determine 'flux' for each pixel
         q_a = np.mean(q_a)  # Grid-average flux through all the pixels
         h_a = np.mean(h_a)  # Grid-average depth through all the pixels
 
         # Side B
-        h_b = np.maximum(
-            zbin - dd_b, 0.0
-        )  # Depth of all pixels (but set min pixel height to zbot). Can be negative, but not zero (because zmin = zbot + huthresh, so there must be pixels below zb).
         q_b = h_b ** (5.0 / 3.0) / manning_b  # Determine 'flux' for each pixel
         q_b = np.mean(q_b)  # Grid-average flux through all the pixels
         h_b = np.mean(h_b)  # Grid-average depth through all the pixels
@@ -1082,8 +1117,8 @@ def subgrid_q_table(
             # This is done by making sure that the wet fraction is 0.0 in the first level on the shallowest side (i.e. if ibin==0, pwet_a or pwet_b must be 0.0).
             # As a result, the weight w will be 0.0 in the first level on the shallowest side.
 
-            pwet_a = (zbin > dd_a).sum() / (n / 2)
-            pwet_b = (zbin > dd_b).sum() / (n / 2)
+            pwet_a = (zbin > dd_a).sum() / int(n / 2)
+            pwet_b = (zbin > dd_b).sum() / int(n / 2)
 
             if ibin == 0:
                 # Ensure that at bottom level, either pwet_a or pwet_b is 0.0
@@ -1116,6 +1151,7 @@ def subgrid_q_table(
             pwet[ibin] = 0.5 * (pwet_a + pwet_b)  # Combined pwet_a and pwet_b
 
         havg[ibin] = hmean  # conveyance depth
+        # print(f"q = {q}")
         nrep[ibin] = hmean ** (5.0 / 3.0) / q  # Representative n for qmean and hmean
 
     nrep_top = nrep[-1]
@@ -1124,7 +1160,7 @@ def subgrid_q_table(
     ### Fitting for nrep above zmax
 
     # Determine nfit at zfit
-    zfit = zmax + zmax - zmin
+    zfit = float(zmax + zmax - zmin)
     hfit = (
         havg_top + zmax - zmin
     )  # mean water depth in cell as computed in SFINCS (assuming linear relation between water level and water depth above zmax)
@@ -1137,23 +1173,57 @@ def subgrid_q_table(
         navg = np.mean(manning)
 
     else:
+
+        if roughness_type == "manning":
+            manning_a = rgh_a
+            manning_b = rgh_b
+            manning   = rgh
+        elif roughness_type == "chezy":
+            manning_a = (1.0 / rgh_a) * h_a ** (1.0 / 6.0)
+            manning_b = (1.0 / rgh_b) * h_b ** (1.0 / 6.0)
+            manning   = (1.0 / rgh) * h ** (1.0 / 6.0)
+            manning_a = np.maximum(manning_a, 0.001)  # Set minimum value to avoid division by zero
+            manning_b = np.maximum(manning_b, 0.001)  # Set minimum value to avoid division by zero
+            manning   = np.maximum(manning, 0.001)  # Set minimum value to avoid division by zero
+
+
         # Use minimum of q_a and q_b
         if q_a < q_b:
             h = np.maximum(zfit - dd_a, 0.0)  # water depth in each pixel
+
+            if roughness_type == "manning":
+                manning_a = rgh_a
+            elif roughness_type == "chezy":
+                manning_a = (1.0 / rgh_a) * h ** (1.0 / 6.0)
+                manning_a = np.maximum(manning_a, 0.001)  # Set minimum value to avoid division by zero
+
             q = np.mean(
                 h ** (5.0 / 3.0) / manning_a
             )  # combined unit discharge for cell
             navg = np.mean(manning_a)
         else:
             h = np.maximum(zfit - dd_b, 0.0)
+            if roughness_type == "manning":
+                manning_b = rgh_b
+            elif roughness_type == "chezy":
+                manning_b = (1.0 / rgh_b) * h ** (1.0 / 6.0)
+                manning_b = np.maximum(manning_b, 0.001)  # Set minimum value to avoid division by zero
             q = np.mean(h ** (5.0 / 3.0) / manning_b)
             navg = np.mean(manning_b)
 
+    # print(f"qq = {q}")
     nfit = hfit ** (5.0 / 3.0) / q
 
     # Actually apply fit on gn2 (this is what is used in sfincs)
-    gnavg2 = 9.81 * navg**2
-    gnavg_top2 = 9.81 * nrep_top**2
+    gnavg2 = float(9.81 * navg**2)
+    gnavg_top2 = float(9.81 * nrep_top**2)
+
+    # print("almost done")    
+    # print(f"gnavg2 = {float(gnavg2)}")
+    # print(f"gnavg_top2 = {float(gnavg_top2)}")
+    # print(f"nrep_top = {float(nrep_top)}")
+    # print(f"zfit - zmax = {float(zfit - zmax)}")
+
 
     if gnavg2 / gnavg_top2 > 0.99 and gnavg2 / gnavg_top2 < 1.01:
         # gnavg2 and gnavg_top2 are almost identical
@@ -1169,8 +1239,15 @@ def subgrid_q_table(
                 nfit = nrep_top + 0.9 * (navg - nrep_top)
             if nfit > nrep_top:
                 nfit = nrep_top + 0.1 * (navg - nrep_top)
-        gnfit2 = 9.81 * nfit**2
+        gnfit2 = float(9.81 * nfit**2)
+        zfit = max(zfit, zmax + 1.0e-6)
+        gnavg2 = max(gnavg2, gnfit2 + 1.0e-8)
         ffit = (((gnavg2 - gnavg_top2) / (gnavg2 - gnfit2)) - 1) / (zfit - zmax)
+
+    # print(f"gnavg2 - gnfit2 = {gnavg2 - gnfit2}")
+    # print(f"zfit - zmax = {zfit - zmax}")
+    # print(f"ffit = {ffit}")
+    # print("done")    
 
     return zmin, zmax, havg, nrep, pwet, ffit, navg, zz
 

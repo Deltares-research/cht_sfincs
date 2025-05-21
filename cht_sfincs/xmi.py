@@ -10,6 +10,7 @@ from ctypes import (
     byref,
     c_double,
     c_int,
+    POINTER
 )
 
 from xmipy import XmiWrapper
@@ -19,15 +20,15 @@ class SfincsXmi(XmiWrapper):
         # if dll_path is a string, convert it to a pathlib.Path object
         if isinstance(dll_path, str):
             dll_path = pl.Path(dll_path)
-        super().__init__(dll_path, working_directory)
+        super().__init__(dll_path, working_directory=working_directory)
         self.rtc_collection = RTCCollection(self)
 
     def get_domain(self):
         self.get_xz_yz()
         self.get_zs()
-        self.get_zb()
+        # self.get_zb() # Does not work for subgrid!
         self.get_qext()
-        self.zbini = self.zb[:].copy()
+        # self.zbini = self.zb[:].copy()
 
     def reset_qext(self):
         """Reset the external fluxes to zero"""
@@ -66,6 +67,10 @@ class SfincsXmi(XmiWrapper):
     def get_qext(self):
         """Get qext"""
         self.qext = self.get_value_ptr("qext")
+
+    def get_uorb(self):
+        """Get uorb"""
+        self.uorb = self.get_value_ptr("uorb")
 
     def set_bed_level(self,
                       x=None,
@@ -133,11 +138,32 @@ class SfincsXmi(XmiWrapper):
     def update_zbuv(self):
         self._execute_function(self.lib.update_zbuv)
 
+    def update_apparent_roughness(self, uorb):
+#        self.tp[:] = tp
+        self.uorb[:] = uorb
+        self._execute_function(self.lib.update_apparent_roughness)
+
     def get_sfincs_cell_index(self, x, y):
         indx = c_int(0)
         self._execute_function(self.lib.get_sfincs_cell_index, byref(c_double(x)), byref(c_double(y)), byref(indx))
         # Index is 1-based in sfincs, so we need to subtract 1 to get the 0-based index
         return indx.value - 1
+
+    def get_cell_indices(self, x, y):
+        # Convert x and y to double arrays
+        x = np.asarray(x, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float64)
+        n = x.shape[0]
+        indx = np.empty(n, dtype=np.int32)
+        # Convert to pointers
+        x_ptr = x.ctypes.data_as(POINTER(c_double))
+        y_ptr = y.ctypes.data_as(POINTER(c_double))
+        indx_ptr = indx.ctypes.data_as(POINTER(c_int))
+
+        self._execute_function(self.lib.get_sfincs_cell_indices, x_ptr, y_ptr, indx_ptr, c_int(n))
+
+        # Index is 1-based in sfincs, so we need to subtract 1 to get the 0-based index
+        return indx - 1
 
     def get_sfincs_cell_area(self, index):
         area = c_double(0.0)

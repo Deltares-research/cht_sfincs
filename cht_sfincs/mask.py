@@ -485,13 +485,6 @@ class SfincsMask:
 
             cvs = ds.Canvas(x_range=xlim, y_range=ylim, plot_height=height, plot_width=width)
 
-            # With this approach we can still see colors of mask 2 and 3 even if they are not there
-            # color_key = {1: active_color, 2: boundary_color, 3: outflow_color}
-            # agg = cvs.points(self.datashader_dataframe, 'x', 'y', ds.min("mask"))
-            # # img = tf.shade(tf.spread(agg, px=px), cmap=active_color)
-            # img = tf.shade(tf.spread(agg, px=px), color_key=color_key, rescale_discrete_levels=True)
-            # img = tf.stack(img, tf.shade(agg, cmap=["black"]))
-
             # Instead, we can create separate images for each mask and stack them
             dfact = self.datashader_dataframe[self.datashader_dataframe["mask"]==1]
             dfbnd = self.datashader_dataframe[self.datashader_dataframe["mask"]==2]

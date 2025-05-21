@@ -27,7 +27,7 @@ class SfincsObservationPoints:
         df = pd.read_csv(file_name,
                          index_col=False,
                          header=None,
-                         sep="\s+",
+                         sep=r"\s+",
                          names=['x', 'y', 'name'])
 
         gdf_list = []
@@ -79,14 +79,14 @@ class SfincsObservationPoints:
         self.gdf = pd.concat([self.gdf, gdf_new], ignore_index=True)
 
     def add_points(self, gdf, name="name"):
-        outline = self.model.grid.exterior.loc[0]["geometry"]
+        exterior = self.model.grid.exterior.unary_union
         gdf = gdf.to_crs(self.model.crs)
         x = np.empty((len(gdf)))
         y = np.empty((len(gdf)))
         for index, row in gdf.iterrows():
             x[index] = row["geometry"].coords[0][0]
             y[index] = row["geometry"].coords[0][1]
-        inpol = inpolygon(x, y, outline)
+        inpol = inpolygon(x, y, exterior)
         gdf_list = []
         for index, row in gdf.iterrows():
             if inpol[index]:
@@ -121,9 +121,20 @@ class SfincsObservationPoints:
         return names
 
 def inpolygon(xq, yq, p):
+   
     shape = xq.shape
     xq = xq.reshape(-1)
     yq = yq.reshape(-1)
     q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
-    p = path.Path([(crds[0], crds[1]) for i, crds in enumerate(p.exterior.coords)])
-    return p.contains_points(q).reshape(shape)
+    # Check if p is a polygon or a multipolygon
+    if isinstance(p, shapely.geometry.MultiPolygon):
+        # Loop through each polygon in the multipolygon
+        inpol = np.zeros((len(q),), dtype=bool)
+        for poly in p.geoms:
+            p = path.Path([(crds[0], crds[1]) for i, crds in enumerate(poly.exterior.coords)])
+            inpol |= p.contains_points(q).reshape(shape)
+    else:
+        p = path.Path([(crds[0], crds[1]) for i, crds in enumerate(p.exterior.coords)])
+        inpol = p.contains_points(q).reshape(shape)
+
+    return inpol    

@@ -292,19 +292,11 @@ class SfincsBoundaryConditions:
             # Set minimum distance between to grid boundary points on polyline to 2 * dx
             min_dist = self.model.grid.data.attrs["dx"] * 2 
 
-        # # Get coordinates of boundary points
-        # if self.model.grid_type == "regular":
-        #     da_mask = self.model.grid.ds["mask"]
-        #     ibnd = np.where(da_mask.values == 2)
-        #     xp = da_mask["xc"].values[ibnd]
-        #     yp = da_mask["yc"].values[ibnd]
-        # else:
         mask = self.model.grid.data["mask"]
         ibnd = np.where(mask == 2)
         xz, yz = self.model.grid.face_coordinates()
         xp = xz[ibnd]
         yp = yz[ibnd]
-
 
         # Make boolean array for points that are include in a polyline 
         used = np.full(xp.shape, False, dtype=bool)

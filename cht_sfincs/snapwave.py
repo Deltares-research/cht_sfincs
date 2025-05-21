@@ -606,7 +606,7 @@ class SnapWaveBoundaryConditions:
         if hs:
             # Forcing by time series        
             if not self.model.input.variables.snapwave_bndfile:
-                self.model.input.variables.snapwave_bwvfile = "snapwave.bnd"
+                self.model.input.variables.snapwave_bndfile = "snapwave.bnd"
             if not self.model.input.variables.snapwave_bhsfile:
                 self.model.input.variables.snapwave_bhsfile = "snapwave.bhs"
             if not self.model.input.variables.snapwave_btpfile:
