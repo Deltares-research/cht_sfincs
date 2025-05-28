@@ -343,6 +343,11 @@ class SubgridTableQuadtree:
                             # Cell falls inside block
                             index_cells_in_block[nr_cells_in_block] = indx
                             nr_cells_in_block += 1
+
+                    if nr_cells_in_block == 0: 
+                        # No cells in this block
+                        continue
+
                     index_cells_in_block = index_cells_in_block[0:nr_cells_in_block]
 
                     msg = f"Number of cells in this block      : {nr_cells_in_block}"
