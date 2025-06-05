@@ -194,9 +194,15 @@ class SfincsGrid:
         ugrid2d = self.data.grid
         self.data["z"] = xu.UgridDataArray(xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d)
 
-    def snap_to_grid(self, polyline, max_snap_distance=1.0):
+    def snap_to_grid(self, polyline):
         if len(polyline) == 0:
             return gpd.GeoDataFrame()
+        # If geographic coordinates, set max_snap_distance to 0.1 degrees
+        if self.model.crs.is_geographic:
+            max_snap_distance = 1.0e-6
+        else:
+            max_snap_distance = 0.1
+
         geom_list = []
         for iline, line in polyline.iterrows():
             geom = line["geometry"]
