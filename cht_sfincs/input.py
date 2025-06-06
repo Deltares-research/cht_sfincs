@@ -252,11 +252,11 @@ class SfincsInput:
             variables.snapwave_dtheta      = None
             variables.snapwave_hmin        = None
             variables.snapwave_fw0         = None
-            variables.bndfile              = None
-            variables.bhsfile              = None
-            variables.btpfile              = None
-            variables.bwdfile              = None
-            variables.bdsfile              = None
+            variables.snapwave_bndfile     = None
+            variables.snapwave_bhsfile     = None
+            variables.snapwave_btpfile     = None
+            variables.snapwave_bwdfile     = None
+            variables.snapwave_bdsfile     = None
             variables.snapwave_crit        = None
             variables.snapwave_igwaves     = None
             variables.snapwave_nrsweeps    = None
