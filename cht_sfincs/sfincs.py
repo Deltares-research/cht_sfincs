@@ -176,6 +176,7 @@ class SFINCS:
 
     def write_batch_file(self):
         fid = open(os.path.join(self.path, "run.bat"), "w")
+        fid.write("set HDF5_USE_FILE_LOCKING=FALSE\n")
         fid.write(self.exe_path + "\\" + "sfincs.exe")
         fid.close()
 
