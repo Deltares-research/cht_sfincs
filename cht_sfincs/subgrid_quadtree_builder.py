@@ -7,12 +7,12 @@ Created on Mon Mar 03 2025
 """
 import numpy as np
 from pyproj import CRS
-
+import geopandas as gpd
+import matplotlib.path as path
 import xarray as xr
 import time
 
 from numba import njit
-
 
 def build_subgrid_table_quadtree(
     grid,
@@ -552,33 +552,31 @@ class SubgridTableQuadtree:
                     msg = "Getting bathy/topo ..."
                     log_info(msg, logger, quiet)
 
+                    # Build the pixel matrix
+                    x00 = (
+                        0.5 * dxp + bm0 * refi * dxp - 0.5 * refi * dxp
+                    )  # start half a cell to the left
+                    x01 = x00 + (bm1 - bm0 + 1) * refi * dxp
+                    y00 = (
+                        0.5 * dyp + bn0 * refi * dyp - 0.5 * refi * dyp
+                    )  # start half a cell below
+                    y01 = y00 + (bn1 - bn0 + 1) * refi * dyp
+
+                    x0 = np.arange(x00, x01, dxp)
+                    y0 = np.arange(y00, y01, dyp)
+                    xg0, yg0 = np.meshgrid(x0, y0)
+
+                    # Rotate and translate
+                    xg = grid.attrs["x0"] + cosrot * xg0 - sinrot * yg0
+                    yg = grid.attrs["y0"] + sinrot * xg0 + cosrot * yg0
+
+                    # Clear variables
+                    del x0, y0, xg0, yg0
+
                     # Get the numpy array zg with bathy/topo values for this block
                     if bathymetry_database:
 
-                        # Delft Dashboard
                         # Get bathymetry on subgrid from bathymetry database
-
-                        # Build the pixel matrix
-                        x00 = (
-                            0.5 * dxp + bm0 * refi * dxp - 0.5 * refi * dxp
-                        )  # start half a cell to the left
-                        x01 = x00 + (bm1 - bm0 + 1) * refi * dxp
-                        y00 = (
-                            0.5 * dyp + bn0 * refi * dyp - 0.5 * refi * dyp
-                        )  # start half a cell below
-                        y01 = y00 + (bn1 - bn0 + 1) * refi * dyp
-
-                        x0 = np.arange(x00, x01, dxp)
-                        y0 = np.arange(y00, y01, dyp)
-                        xg0, yg0 = np.meshgrid(x0, y0)
-
-                        # Rotate and translate
-                        xg = grid.attrs["x0"] + cosrot * xg0 - sinrot * yg0
-                        yg = grid.attrs["y0"] + sinrot * xg0 + cosrot * yg0
-
-                        # Clear variables
-                        del x0, y0, xg0, yg0
-
                         zg = bathymetry_database.get_bathymetry_on_grid(
                             xg, yg, crs, bathymetry_sets
                         )
@@ -607,19 +605,34 @@ class SubgridTableQuadtree:
                     manning_grid = np.full(np.shape(xg), np.nan)
 
                     if roughness_sets:  # this still needs to be implemented
+
+                        # manning_grid = bathymetry_database.get_bathymetry_on_grid(
+                        #     xg, yg, crs, roughness_sets
+                        # )
+                        # Loop through roughness sets, check if one has polygon file
+
                         manning_grid = bathymetry_database.get_bathymetry_on_grid(
                             xg, yg, crs, roughness_sets
                         )
 
+                        for roughness_set in roughness_sets:
+                            if "polygon_file" in roughness_set and "value" in roughness_set:
+                                polygon_file = roughness_set["polygon_file"]
+                                # Read the polygon file and get the values
+                                gdf = gpd.read_file(polygon_file)
+                                value = roughness_set["value"]
+
+                                # Loop through polygons in gdf
+                                inpols = np.full(xg.shape, False)
+                                for ip, polygon in gdf.iterrows():
+                                    inpol = inpolygon(xg, yg, polygon["geometry"])
+                                    inpols = np.logical_or(inpols, inpol)
+
+                                manning_grid[inpols] = value
+
                     # Fill in remaining NaNs with default values
-                    isn = np.where(np.isnan(manning_grid))
-                    try:
-                        manning_grid[(isn and np.where(zg <= manning_level))] = (
-                            manning_water
-                        )
-                    except:
-                        pass
-                    manning_grid[(isn and np.where(zg > manning_level))] = manning_land
+                    manning_grid[np.isnan(manning_grid) & (zg < manning_level)] = manning_water
+                    manning_grid[np.isnan(manning_grid) & (zg >= manning_level)] = manning_land
 
                     ###############################
                     # Process U/V points in block #
@@ -1263,3 +1276,11 @@ def log_info(msg, logger, quiet):
         logger.info(msg)
     if not quiet:
         print(msg)
+
+def inpolygon(xq, yq, p):
+    shape = xq.shape
+    xq = xq.reshape(-1)
+    yq = yq.reshape(-1)
+    q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
+    p = path.Path([(crds[0], crds[1]) for i, crds in enumerate(p.exterior.coords)])
+    return p.contains_points(q).reshape(shape)

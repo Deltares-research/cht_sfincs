@@ -5,6 +5,7 @@ Created on Sat Jun 18 09:03:08 2022
 """
 import os
 import numpy as np
+import xarray as xr
 import geopandas as gpd
 import shapely
 import pandas as pd
@@ -34,6 +35,8 @@ class SfincsBoundaryConditions:
         # Write all boundary data
         self.write_boundary_points()
         self.write_boundary_conditions_timeseries()
+        # Alternatively, write netcdf file
+        self.write_to_netcdf()
 
     def read_boundary_points(self):
 
@@ -203,6 +206,55 @@ class SfincsBoundaryConditions:
         #           header=False,
         #           float_format="%.3f")
         to_fwf(df, file_name)
+
+    def write_to_netcdf(self):
+
+        if len(self.gdf.index)==0:
+            # No boundary points
+            return
+        
+        if len(self.gdf.loc[0]["timeseries"].index) == 0:
+            # No time series data
+            return
+
+        # if not self.model.input.variables.netbndbzsbzifile:
+        #     self.model.input.variables.netbndbzsbzifile = "sfincs_boundary_conditions.nc"            
+        self.model.input.variables.netbndbzsbzifile = "sfincs_boundary_conditions.nc"            
+        file_name = os.path.join(self.model.path, self.model.input.variables.netbndbzsbzifile)
+
+        nrp = len(self.gdf.index)
+        times = self.gdf.loc[0]["timeseries"].index
+        nt = len(times) 
+        float_minutes = ((times - np.datetime64("1970-01-01T00:00:00")) / pd.Timedelta(seconds=60)).to_numpy()
+        x = np.empty(nrp, dtype=float)
+        y = np.empty(nrp, dtype=float)
+        zs = np.empty((nt, nrp), dtype=float)
+
+        # Loop through boundary points and obtain data from timeseries
+        for ip, point in self.gdf.iterrows():
+            x[ip] = point["geometry"].x
+            y[ip] = point["geometry"].y
+            df = point["timeseries"]
+            wl = df["wl"].values
+            zs[:, ip] = wl
+
+        # Make XArray Dataset
+        ds = xr.Dataset()
+
+        ds["time"] = xr.DataArray(float_minutes, dims=["time"])
+        ds["time"].attrs["units"] = "minutes since 1970-01-01 00:00:00.0 +0000"
+        ds["x"] = xr.DataArray(x, dims=["stations"])
+        ds["y"] = xr.DataArray(y, dims=["stations"])
+        ds["zs"] = xr.DataArray(zs,
+                                dims=["time", "stations"],
+                                attrs={"units": "m",
+                                       "long_name": "water level at boundary points"})
+
+        # Add attributes
+        ds.attrs["description"] = "SFINCS boundary conditions"
+
+        # Write netcdf file
+        ds.to_netcdf(file_name, mode="w", format="NETCDF4", engine="netcdf4")
     
     def read_boundary_conditions_astro(self):
 

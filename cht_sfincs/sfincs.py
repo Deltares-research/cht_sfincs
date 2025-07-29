@@ -108,9 +108,9 @@ class SFINCS:
                 # The grid object contains coordinates, neighbor indices, mask, snapwave mask and bed level.
                 self.grid.read()
 
-            # Sub-grid tables
-            if self.bathy_type == "subgrid":
-                self.subgrid.read()
+            # # Sub-grid tables
+            # if self.bathy_type == "subgrid":
+            #     self.subgrid.read()
 
         # Initial conditions (reads ini file)
         self.initial_conditions.read()

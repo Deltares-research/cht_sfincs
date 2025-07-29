@@ -7,6 +7,8 @@ import os
 import geopandas as gpd
 import shapely
 import pandas as pd
+import numpy as np
+import xarray as xr
 from tabulate import tabulate
 
 class SfincsDischargePoints:
@@ -132,6 +134,56 @@ class SfincsDischargePoints:
             df = pd.concat([df, point["timeseries"]["q"]], axis=1)
         df.index = dt
         to_fwf(df, filename)
+
+
+    def write_to_netcdf(self):
+
+        if len(self.gdf.index)==0:
+            # No boundary points
+            return
+        
+        if len(self.gdf.loc[0]["timeseries"].index) == 0:
+            # No time series data
+            return
+
+        # if not self.model.input.variables.netbndbzsbzifile:
+        #     self.model.input.variables.netbndbzsbzifile = "sfincs_boundary_conditions.nc"            
+        self.model.input.variables.netsrcdisfile = "sfincs_discharges.nc"            
+        file_name = os.path.join(self.model.path, self.model.input.variables.netsrcdisfile)
+
+        nrp = len(self.gdf.index)
+        times = self.gdf.loc[0]["timeseries"].index
+        nt = len(times) 
+        float_minutes = ((times - np.datetime64("1970-01-01T00:00:00")) / pd.Timedelta(seconds=60)).to_numpy()
+        x = np.empty(nrp, dtype=float)
+        y = np.empty(nrp, dtype=float)
+        q = np.empty((nt, nrp), dtype=float)
+
+        # Loop through boundary points and obtain data from timeseries
+        for ip, point in self.gdf.iterrows():
+            x[ip] = point["geometry"].x
+            y[ip] = point["geometry"].y
+            df = point["timeseries"]
+            q[:, ip] = df["q"].values
+
+        # Make XArray Dataset
+        ds = xr.Dataset()
+
+        ds["time"] = xr.DataArray(float_minutes, dims=["time"])
+        ds["time"].attrs["units"] = "minutes since 1970-01-01 00:00:00.0 +0000"
+        ds["x"] = xr.DataArray(x, dims=["stations"])
+        ds["y"] = xr.DataArray(y, dims=["stations"])
+        ds["discharge"] = xr.DataArray(q,
+                                       dims=["time", "stations"],
+                                       attrs={"units": "m3 s-1",
+                                       "long_name": "discharge at source points"})
+
+        # Add attributes
+        ds.attrs["description"] = "SFINCS discharge points"
+
+        # Write netcdf file
+        ds.to_netcdf(file_name, mode="w", format="NETCDF4", engine="netcdf4")
+
 
     def add_point(self, x, y, name, q=0.0):
 
