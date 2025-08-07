@@ -60,7 +60,7 @@ class Variables:
         self.rugdepth = 0.01
         self.crsgeo = False
         self.epsg = None
-        self.wiggle_suppression = False
+        self.wiggle_suppression = True
         self.storevel = False
         self.storemeteo = False
         self.store_dynamic_bed_level = False
@@ -117,14 +117,15 @@ class Variables:
         self.snapwave_bdsfile     = None
         self.snapwave_gamma       = 0.8
         self.snapwave_gammaig     = 1.0
-        self.snapwave_gammax      = 1.0
-        self.snapwave_dtheta      = 15.0
-        self.snapwave_hmin        = 0.1
-        self.snapwave_fw0         = 0.01
-        self.snapwave_crit        = 0.01
+        # self.snapwave_gammax      = 1.0
+        # self.snapwave_dtheta      = 15.0
+        # self.snapwave_hmin        = 0.1
+        # self.snapwave_fw0         = 0.01
+        # self.snapwave_crit        = 0.01
         self.snapwave_igwaves     = True
-        self.snapwave_nrsweeps    = 1
-        self.storefw              = False
+        # self.snapwave_nrsweeps    = 1
+        # self.storefw              = False
+        self.snapwave_use_herbers = 0
 
         self.inputformat = "bin"
         self.outputformat = "net"
@@ -261,7 +262,7 @@ class SfincsInput:
             variables.snapwave_igwaves     = None
             variables.snapwave_nrsweeps    = None
             variables.storefw              = None
-            variables.wvmfile = None
+            variables.wvmfile              = None
         else:    
             if len(self.model.wave_makers.gdf) == 0:
                 variables.wvmfile = None
