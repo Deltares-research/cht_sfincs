@@ -29,10 +29,11 @@ class SfincsCrossSections:
 
     def write(self, file_name=None):
 
-        if not self.model.input.variables.crsfile:
-            return
         if len(self.gdf.index)==0:
             return
+
+        if not self.model.input.variables.crsfile:
+            self.model.input.variables.crsfile = "sfincs.crs"
 
         filename = os.path.join(self.model.path, self.model.input.variables.crsfile)
 

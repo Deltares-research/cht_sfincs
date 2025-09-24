@@ -28,10 +28,11 @@ class SfincsThinDams:
 
     def write(self):
 
-        if not self.model.input.variables.thdfile:
-            return
         if len(self.gdf.index)==0:
             return
+
+        if not self.model.input.variables.thdfile:
+            self.model.input.variables.thdfile = "sfincs.thd"
 
         filename = os.path.join(self.model.path, self.model.input.variables.thdfile)
 

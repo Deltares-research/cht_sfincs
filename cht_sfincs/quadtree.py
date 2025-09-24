@@ -11,7 +11,7 @@ import shapely
 import rasterio
 from rasterio.transform import from_origin
 from rasterio.enums import Resampling
-
+from rasterio.windows import Window
 import xugrid as xu
 import xarray as xr
 import warnings
@@ -558,6 +558,68 @@ class SfincsGrid:
         ) as dst:
             dst.write(ii, 1)
 
+
+    def make_index_cog_chunked(self, filename, filename_topobathy, blocksize=1024):
+        """
+        Make a COG file with indices of the quadtree grid cells,
+        processing in chunks so it works for very large rasters.
+        """
+
+        # Read metadata from topobathy file
+        with rasterio.open(filename_topobathy) as src:
+            dx = src.res[0]
+            self.model.crs = src.crs
+            transform = src.transform
+            width = src.width
+            height = src.height
+
+        nodata = np.uint32(2147483647)
+
+        # Prepare output COG
+        profile = {
+            "driver": "COG",
+            "height": height,
+            "width": width,
+            "count": 1,
+            "dtype": "uint32",
+            "crs": self.model.crs,
+            "transform": transform,
+            "nodata": nodata,
+            "overview_resampling": Resampling.nearest,
+            "blockxsize": blocksize,
+            "blockysize": blocksize,
+            "tiled": True,
+        }
+
+        with rasterio.open(filename, "w", **profile) as dst:
+
+            # Process block by block
+            for row_off in range(0, height, blocksize):
+                for col_off in range(0, width, blocksize):
+
+                    win_width = min(blocksize, width - col_off)
+                    win_height = min(blocksize, height - row_off)
+                    window = Window(col_off, row_off, win_width, win_height)
+
+                    # Build row/col indices for this block
+                    rows = np.arange(row_off, row_off + win_height)
+                    cols = np.arange(col_off, col_off + win_width)
+
+                    # Compute x, y coordinates of pixel centers (meshgrid form)
+                    x_coords = transform.c + (cols + 0.5) * transform.a
+                    y_coords = transform.f + (rows + 0.5) * transform.e
+
+                    xx, yy = np.meshgrid(x_coords, y_coords)
+
+                    # Look up indices in flood model
+                    indices = self.get_indices_at_points(xx, yy)
+                    indices = indices.astype(np.int32, copy=False)
+
+                    # Replace invalid values
+                    indices[indices == -999] = nodata
+
+                    # Write chunk into output
+                    dst.write(indices, 1, window=window)
 
 def binary_search(val_array, vals):
     indx = np.searchsorted(val_array, vals)  # ind is size of vals

@@ -48,7 +48,7 @@ class SfincsObservationPoints:
 
         if not file_name:
             if not self.model.input.variables.obsfile:
-                return
+                self.model.input.variables.obsfile = "sfincs.obs"
             file_name = os.path.join(self.model.path, self.model.input.variables.obsfile)
         
         if self.model.crs.is_geographic:

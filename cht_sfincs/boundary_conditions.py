@@ -35,8 +35,8 @@ class SfincsBoundaryConditions:
         # Write all boundary data
         self.write_boundary_points()
         self.write_boundary_conditions_timeseries()
-        # Alternatively, write netcdf file
-        self.write_to_netcdf()
+        # # Alternatively, write netcdf file
+        # self.write_to_netcdf()
 
     def read_boundary_points(self):
 
