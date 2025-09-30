@@ -23,8 +23,8 @@ x0 = 0.0
 y0 = 0.0
 dx = 5.0
 dy = 5.0
-nmax = int(lx / dx)
-mmax = int(ly / dy)
+nmax = int(ly / dy)
+mmax = int(lx / dx)
 rot = 0.0
 sf.grid.build(x0, y0, nmax, mmax, dx, dy, rot)
 sf.grid.set_uniform_bathymetry(-2.0)

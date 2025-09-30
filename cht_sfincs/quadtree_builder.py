@@ -32,7 +32,7 @@ def build_quadtree_xugrid(x0, y0, nmax, mmax, dx, dy, rotation, crs,
     x0, y0 : float
         Origin of the grid.
     nmax, mmax : int
-        Number of cells in x and y direction.
+        Number of cells in y and x direction.
     dx, dy : float
         Grid spacing in x and y direction.
     rotation : float
@@ -201,8 +201,17 @@ class QuadtreeGrid:
             dy = self.dy/2**ilev
             nmax = self.nmax * 2**ilev
             mmax = self.mmax * 2**ilev
-            # Add buffer of 0.5*dx around polygon
+
             polbuf = polygon["geometry"]
+
+            # Now get the exterior coords of polbuf
+            if polbuf.geom_type == "MultiPolygon":
+                # Get the exterior coords of all polygons in the MultiPolygon
+                all_coords = []
+                for poly in polbuf.geoms:
+                    all_coords.extend(list(poly.exterior.coords))
+                polbuf = Polygon(all_coords)
+
             # Rotate polbuf to grid (this is needed to find cells that could fall within polbuf)
             coords = polbuf.exterior.coords[:]
             npoints = len(coords)
