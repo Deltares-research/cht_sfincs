@@ -129,7 +129,7 @@ class SfincsGrid:
                        bathymetry_database=None,
                        zmin=-1.0e9,
                        zmax=1.0e9,
-                       chunk_size=10000,
+                       chunk_size=2000,
                        quiet=True):
         
         if bathymetry_database is None:
@@ -198,7 +198,8 @@ class SfincsGrid:
 
             if np.size(x_chunks) > 1 or np.size(y_chunks) > 1:
 
-                # Looks like we need to do it in chunks
+                # Looks like we need to do it in chunks. It would be better to do all of this 
+                # in cht_bathymetry!
 
                 if not quiet:
                     print(f"Processing in {len(x_chunks)} x {len(y_chunks)} chunks ...")
