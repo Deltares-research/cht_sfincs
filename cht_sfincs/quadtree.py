@@ -124,7 +124,13 @@ class SfincsGrid:
     def set_uniform_bathymetry(self, zb):
         self.data["z"][:] = zb
 
-    def set_bathymetry(self, bathymetry_sets, bathymetry_database=None, zmin=-1.0e9, zmax=1.0e9, quiet=True):
+    def set_bathymetry(self,
+                       bathymetry_sets,
+                       bathymetry_database=None,
+                       zmin=-1.0e9,
+                       zmax=1.0e9,
+                       chunk_size=10000,
+                       quiet=True):
         
         if bathymetry_database is None:
             print("Error! No bathymetry database provided!")
@@ -173,17 +179,79 @@ class SfincsGrid:
                   
             xz  = xy[cell_indices_in_level, 0]
             yz  = xy[cell_indices_in_level, 1]
-            dxmin = dx / 2**ilev
-
-            # if self.data.grid.crs.is_geographic:
+            dxlev = dx / 2**ilev # cell size in this level (m or degrees if geographic)
+            # dxmin is cell size in meters 
             if self.model.crs.is_geographic:
-                dxmin = dxmin * 111000.0
+                dxmin = dxlev * 111000.0
+            else:
+                dxmin = dxlev
 
-            zgl = bathymetry_database.get_bathymetry_on_points(xz,
-                                                               yz,
-                                                               dxmin,
-                                                               self.model.crs,
-                                                               bathymetry_sets)
+            # Perhaps we need to do this in chunks if the cells cover a large area.
+            # In that case, we can determine the bounding box of all cells in this level,
+            # and then process the cells in chunks.
+            x_min = np.min(xz) - dxlev
+            x_max = np.max(xz) + dxlev
+            y_min = np.min(yz) - dxlev
+            y_max = np.max(yz) + dxlev
+            x_chunks = np.arange(x_min, x_max, chunk_size * dxlev)
+            y_chunks = np.arange(y_min, y_max, chunk_size * dxlev)
+
+            if np.size(x_chunks) > 1 or np.size(y_chunks) > 1:
+
+                # Looks like we need to do it in chunks
+
+                if not quiet:
+                    print(f"Processing in {len(x_chunks)} x {len(y_chunks)} chunks ...")
+
+                zgl = np.full(len(xz), np.nan)
+                # Loop through x and y chunks
+                for ix in range(len(x_chunks)):
+                    for iy in range(len(y_chunks)):
+                        if not quiet:
+                            print(f"Processing chunk {ix+1}, {iy+1} of {len(x_chunks)}, {len(y_chunks)} ...")
+
+                        # Find points xz and yz in this chunk
+
+                        if ix < len(x_chunks) - 1:
+                            x_min_chunk = x_chunks[ix]
+                            x_max_chunk = x_chunks[ix + 1]
+                        else:
+                            x_min_chunk = x_chunks[ix]
+                            x_max_chunk = x_max
+
+                        if iy < len(y_chunks) - 1:
+                            y_min_chunk = y_chunks[iy]
+                            y_max_chunk = y_chunks[iy + 1]
+                        else:
+                            y_min_chunk = y_chunks[iy]
+                            y_max_chunk = y_max
+
+                        in_chunk = np.where((xz >= x_min_chunk) & (xz < x_max_chunk) &
+                                            (yz >= y_min_chunk) & (yz < y_max_chunk))[0]
+
+                        if len(in_chunk) > 0:
+
+                            xzc = xz[in_chunk]
+                            yzc = yz[in_chunk]
+                            zgc = bathymetry_database.get_bathymetry_on_points(xzc,
+                                                                               yzc,
+                                                                               dxmin,
+                                                                               self.model.crs,
+                                                                               bathymetry_sets)
+                            zgl[in_chunk] = zgc
+
+            else:                
+                # No need for chuncking. Do it in one go.
+                zgl = bathymetry_database.get_bathymetry_on_points(xz,
+                                                                   yz,
+                                                                   dxmin,
+                                                                   self.model.crs,
+                                                                   bathymetry_sets)
+
+            # Limit zgl to zmin and zmax
+            zgl = np.maximum(zgl, zmin)
+            zgl = np.minimum(zgl, zmax)
+            zz[cell_indices_in_level] = zgl
             
             # Limit zgl to zmin and zmax
             zgl = np.maximum(zgl, zmin)
