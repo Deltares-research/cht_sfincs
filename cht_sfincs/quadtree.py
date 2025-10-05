@@ -187,19 +187,24 @@ class SfincsGrid:
                 dxmin = dxlev
 
             # Perhaps we need to do this in chunks if the cells cover a large area.
-            # In that case, we can determine the bounding box of all cells in this level,
-            # and then process the cells in chunks.
+            # We first determine the bounding box of all cells in this level.
+            # If if is expected that the total number of cells that will be loaded
+            # from the bathymetry database in x or y direction exceeds chunk_size,
+            # we do it in chunks. It would be better to do all of this 
+            # in cht_bathymetry!
+
+            # Boundaries of all cells in this level
             x_min = np.min(xz) - dxlev
             x_max = np.max(xz) + dxlev
             y_min = np.min(yz) - dxlev
             y_max = np.max(yz) + dxlev
+            # Create chunk boundaries
             x_chunks = np.arange(x_min, x_max, chunk_size * dxlev)
             y_chunks = np.arange(y_min, y_max, chunk_size * dxlev)
 
             if np.size(x_chunks) > 1 or np.size(y_chunks) > 1:
 
-                # Looks like we need to do it in chunks. It would be better to do all of this 
-                # in cht_bathymetry!
+                # Looks like we need to do it in chunks. 
 
                 if not quiet:
                     print(f"Processing in {len(x_chunks)} x {len(y_chunks)} chunks ...")
