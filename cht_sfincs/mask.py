@@ -559,13 +559,19 @@ def even(num):
     else:  
         return False
 
-def inpolygon(xq, yq, p):
-    shape = xq.shape
-    xq = xq.reshape(-1)
-    yq = yq.reshape(-1)
-    q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
-    p = path.Path([(crds[0], crds[1]) for i, crds in enumerate(p.exterior.coords)])
-    return p.contains_points(q).reshape(shape)
+# def inpolygon(xq, yq, p):
+#     shape = xq.shape
+#     xq = xq.reshape(-1)
+#     yq = yq.reshape(-1)
+#     q = [(xq[i], yq[i]) for i in range(xq.shape[0])]
+#     p = path.Path([(crds[0], crds[1]) for i, crds in enumerate(p.exterior.coords)])
+#     return p.contains_points(q).reshape(shape)
+
+def inpolygon(xq, yq, poly):
+    coords = np.column_stack((xq.ravel(), yq.ravel()))
+    pts = shapely.points(coords)
+    inside = shapely.contains(poly, pts)   # vectorized
+    return inside.reshape(xq.shape)
 
 def binary_search(vals, val):    
     indx = np.searchsorted(vals, val)

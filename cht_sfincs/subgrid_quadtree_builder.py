@@ -28,6 +28,7 @@ def build_subgrid_table_quadtree(
     huthresh=0.01,
     zmin=-999999.0,
     zmax=999999.0,
+    zfill=None,
     weight_option="min",
     roughness_type="manning",
     bathymetry_database=None,
@@ -52,6 +53,7 @@ def build_subgrid_table_quadtree(
         huthresh,
         zmin,
         zmax,
+        zfill,
         weight_option,
         roughness_type,
         bathymetry_database,
@@ -82,6 +84,7 @@ class SubgridTableQuadtree:
         huthresh,
         zmin,
         zmax,
+        zfill,
         weight_option,
         roughness_type,
         bathymetry_database,
@@ -389,6 +392,11 @@ class SubgridTableQuadtree:
                         zg = bathymetry_database.get_bathymetry_on_grid(
                             xg, yg, crs, bathymetry_sets, method="linear"
                         )
+
+                        if zfill is not None:
+                            # Fill any remaining NaN values with zfill
+                            zg[np.isnan(zg)] = zfill
+
                     else:
                         # HydroMT
                         # zg = da_dep.values
@@ -580,6 +588,10 @@ class SubgridTableQuadtree:
                         zg = bathymetry_database.get_bathymetry_on_grid(
                             xg, yg, crs, bathymetry_sets
                         )
+
+                        if zfill is not None:
+                            # Fill any remaining NaN values with zfill
+                            zg[np.isnan(zg)] = zfill
 
                     else:
                         # HydroMT

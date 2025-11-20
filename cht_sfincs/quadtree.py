@@ -130,6 +130,7 @@ class SfincsGrid:
                        zmin=-1.0e9,
                        zmax=1.0e9,
                        chunk_size=2000,
+                       zfill=None,
                        quiet=True):
         
         if bathymetry_database is None:
@@ -264,6 +265,10 @@ class SfincsGrid:
             zgl = np.minimum(zgl, zmax)
 
             zz[cell_indices_in_level] = zgl
+
+        if zfill is not None:
+            # Fill any remaining NaN values with zfill
+            zz[np.isnan(zz)] = zfill 
 
         ugrid2d = self.data.grid
         self.data["z"] = xu.UgridDataArray(xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d)
