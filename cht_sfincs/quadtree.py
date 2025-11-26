@@ -44,8 +44,6 @@ class SfincsGrid:
 
         self.type = "quadtree"
 
-        self.get_exterior()
-
         crd_dict = self.data["crs"].attrs
         if "projected_crs_name" in crd_dict:
             self.model.crs = CRS(crd_dict["projected_crs_name"])
@@ -53,6 +51,8 @@ class SfincsGrid:
             self.model.crs = CRS(crd_dict["geographic_crs_name"])
         else:
             print("Could not find CRS in quadtree netcdf file")
+
+        self.get_exterior()
 
         self.data["crs"] = self.model.crs.to_epsg()
         self.data["crs"].attrs = self.model.crs.to_cf()
@@ -311,7 +311,6 @@ class SfincsGrid:
             merged = shapely.ops.linemerge(linestrings)
             # Merge polygons
             polygons = shapely.ops.polygonize(merged)
-    #        polygons = shapely.simplify(polygons, self.dx)
             self.exterior = gpd.GeoDataFrame(geometry=list(polygons), crs=self.model.crs)
         except:
             self.exterior = gpd.GeoDataFrame()    
