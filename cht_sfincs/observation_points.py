@@ -30,6 +30,9 @@ class SfincsObservationPoints:
                          sep=r"\s+",
                          names=['x', 'y', 'name'])
 
+        # there are any floats or ints in the name column, convert them to str
+        df["name"] = df["name"].astype(str)
+
         gdf_list = []
         # Loop through points
         for ind in range(len(df.x.values)):
