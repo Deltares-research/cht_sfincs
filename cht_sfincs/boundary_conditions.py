@@ -52,7 +52,7 @@ class SfincsBoundaryConditions:
 
         # Read the bnd file
         df = pd.read_csv(file_name, index_col=False, header=None,
-                         names=['x', 'y'], sep="\s+")
+                         names=['x', 'y'], sep=r"\s+")
 
         gdf_list = []
         # Loop through points
@@ -505,7 +505,7 @@ class SfincsBoundaryConditions:
 def read_timeseries_file(file_name, ref_date):
     # Returns a dataframe with time series for each of the columns
     df = pd.read_csv(file_name, index_col=0, header=None,
-                     sep="\s+")
+                     sep=r"\s+")
     ts = ref_date + pd.to_timedelta(df.index, unit="s")
     df.index = ts
     return df

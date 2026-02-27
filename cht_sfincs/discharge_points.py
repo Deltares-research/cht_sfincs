@@ -30,7 +30,7 @@ class SfincsDischargePoints:
 
         # Read the bnd file
         df = pd.read_csv(filename, index_col=False, header=None,
-             sep="\s+", names=['x', 'y', 'name'])
+             sep=r"\s+", names=['x', 'y', 'name'])
 
         self.gdf = gpd.GeoDataFrame()
         # Loop through points to add them to the gdf
@@ -254,7 +254,7 @@ class SfincsDischargePoints:
 def read_timeseries_file(file_name, ref_date):
     # Returns a dataframe with time series for each of the columns
     df = pd.read_csv(file_name, index_col=0, header=None,
-                     sep="\s+")
+                     sep=r"\s+")
     ts = ref_date + pd.to_timedelta(df.index, unit="s")
     df.index = ts
     return df
