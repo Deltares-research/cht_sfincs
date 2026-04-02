@@ -26,7 +26,7 @@ class SfincsXmi(XmiWrapper):
     def get_domain(self):
         self.get_xz_yz()
         self.get_zs()
-        # self.get_zb() # Does not work for subgrid!
+        self.get_zb() # Does not work for subgrid!
         self.get_qext()
         # self.zbini = self.zb[:].copy()
 
