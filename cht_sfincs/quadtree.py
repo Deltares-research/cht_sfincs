@@ -24,7 +24,7 @@ import datashader as ds
 import datashader.transfer_functions as tf
 from datashader.utils import export_image
 
-from cht_utils.misc_tools import interp2
+from cht_utils.interpolation import interp2
 from .quadtree_builder import build_quadtree_xugrid, cut_inactive_cells
 
 class SfincsGrid:

@@ -11,7 +11,7 @@ import xarray as xr
 from multiprocessing.pool import ThreadPool
 # from numba import njit
 
-from cht_utils.misc_tools import interp2
+from cht_utils.interpolation import interp2
 # from cht_bathymetry.bathymetry_database import bathymetry_database
     
 class SfincsSubgridTable:

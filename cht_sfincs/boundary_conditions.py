@@ -12,7 +12,7 @@ import pandas as pd
 # from pandas.tseries.offsets import DateOffset
 from tabulate import tabulate
 from pyproj import Transformer
-from cht_utils.deltares_ini import IniStruct
+from cht_utils.fileio.deltares_ini import IniStruct
 from cht_tide.tide_predict import predict
 
 class SfincsBoundaryConditions:

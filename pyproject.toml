@@ -28,5 +28,4 @@ dependencies = [ "numpy",
                  "cht_utils@ git+https://github.com/deltares-research/cht_utils.git",
                  "cht_tide@ git+https://github.com/deltares-research/cht_tide.git",
                  "cht_tiling@ git+https://github.com/deltares-research/cht_tiling.git",
-                 "cht_physics@ git+https://github.com/deltares-research/cht_physics.git",
 				]
