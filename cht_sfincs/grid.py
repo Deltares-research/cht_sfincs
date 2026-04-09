@@ -874,8 +874,7 @@ class SfincsGrid:
     def make_index_tiles(self, path, zoom_range=None, format=0):
         
         import math
-        from cht_tiling.tiling import deg2num
-        from cht_tiling.tiling import num2deg
+        from cht_tiling.utils import deg2num, num2deg
         import cht_utils.fileops as fo
         
         npix = 256
