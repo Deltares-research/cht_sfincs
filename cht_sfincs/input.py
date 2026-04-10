@@ -1,16 +1,24 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sat May 15 08:08:40 2021
+"""SFINCS input file reader/writer (sfincs.inp).
 
-@author: ormondt
+Defines the Variables dataclass (all supported sfincs.inp keyword–value pairs)
+and the SfincsInput class that reads and writes the sfincs.inp text file.
 """
-import os
-import datetime
+
 import copy
+import datetime
+import os
+
 # from pyproj import CRS
 
+
 class Variables:
-    def __init__(self):
+    """Container for all sfincs.inp keyword-value pairs.
+
+    All attributes correspond directly to SFINCS input keywords with
+    their default values set at construction time.
+    """
+
+    def __init__(self) -> None:
         self.mmax = 0
         self.nmax = 0
         self.dx = 0.1
@@ -108,23 +116,23 @@ class Variables:
         self.wstfile = None
         self.wvmfile = None
 
-        self.dtwave               = 1800.0
-        self.snapwave             = False
-        self.snapwave_bndfile     = None
-        self.snapwave_bhsfile     = None
-        self.snapwave_btpfile     = None
-        self.snapwave_bwdfile     = None
-        self.snapwave_bdsfile     = None
-        self.snapwave_gamma       = 0.8
-        self.snapwave_gammaig     = 1.0
-        self.snapwave_gammax      = 1.0
-        self.snapwave_dtheta      = 15.0
-        self.snapwave_hmin        = 0.1
-        self.snapwave_fw0         = 0.01
-        self.snapwave_crit        = 0.01
-        self.snapwave_igwaves     = True
-        self.snapwave_nrsweeps    = 1
-        self.storefw              = False
+        self.dtwave = 1800.0
+        self.snapwave = False
+        self.snapwave_bndfile = None
+        self.snapwave_bhsfile = None
+        self.snapwave_btpfile = None
+        self.snapwave_bwdfile = None
+        self.snapwave_bdsfile = None
+        self.snapwave_gamma = 0.8
+        self.snapwave_gammaig = 1.0
+        self.snapwave_gammax = 1.0
+        self.snapwave_dtheta = 15.0
+        self.snapwave_hmin = 0.1
+        self.snapwave_fw0 = 0.01
+        self.snapwave_crit = 0.01
+        self.snapwave_igwaves = True
+        self.snapwave_nrsweeps = 1
+        self.storefw = False
         self.snapwave_use_herbers = 0
 
         self.inputformat = "bin"
@@ -136,18 +144,32 @@ class Variables:
 
 
 class SfincsInput:
-    def __init__(self, sf):
+    """SFINCS input file (sfincs.inp) reader and writer.
+
+    Provides ``read()`` and ``write()`` methods that parse/serialize the
+    space-delimited keyword = value format used by sfincs.inp.
+
+    Parameters
+    ----------
+    sf : SFINCS
+        The parent SFINCS model instance.
+    """
+
+    def __init__(self, sf: "SFINCS") -> None:
         self.model = sf
         self.variables = Variables()
 
-    def read(self):
-        # Reads sfincs.inp
+    def read(self) -> None:
+        """Read sfincs.inp and populate the Variables object.
 
+        Returns
+        -------
+        None
+        """
         input_file = os.path.join(self.model.path, "sfincs.inp")
 
-        fid = open(input_file, "r")
-        lines = fid.readlines()
-        fid.close()
+        with open(input_file, "r") as fid:
+            lines = fid.readlines()
         for line in lines:
             # Remove everything from line starting with first #
             if "#" in line:
@@ -165,28 +187,28 @@ class SfincsInput:
                 try:
                     # Now try to convert to float
                     val = float(val)
-                except:
+                except Exception:
                     pass
             if name == "tref":
                 try:
                     val = datetime.datetime.strptime(val.rstrip(), "%Y%m%d %H%M%S")
-                except:
+                except Exception:
                     val = None
             if name == "tstart":
                 try:
                     val = datetime.datetime.strptime(val.rstrip(), "%Y%m%d %H%M%S")
-                except:
+                except Exception:
                     val = None
             if name == "tstop":
                 try:
                     val = datetime.datetime.strptime(val.rstrip(), "%Y%m%d %H%M%S")
-                except:
+                except Exception:
                     val = None
 
             if hasattr(self.variables, name):
-                if type(getattr(self.variables, name)) is bool:
+                if isinstance(getattr(self.variables, name), bool):
                     if val == 0:
-                        val = False       
+                        val = False
                     elif val == 1:
                         val = True
                     elif val[0].lower() == "t" or val[0].lower() == "y":
@@ -198,7 +220,7 @@ class SfincsInput:
                         val = getattr(self.variables, name)
 
             setattr(self.variables, name, val)
-        
+
         # if self.variables.qtrfile:
         #     self.model.grid_type = "quadtree"
         # else:
@@ -214,8 +236,13 @@ class SfincsInput:
         if isinstance(self.variables.cdval, str):
             self.variables.cdval = [float(x) for x in self.variables.cdval.split()]
 
-    def write(self):
-        # Write sfincs.inp
+    def write(self) -> None:
+        """Write the current Variables state to sfincs.inp.
+
+        Returns
+        -------
+        None
+        """
         input_file = os.path.join(self.model.path, "sfincs.inp")
 
         # Make some adjustments
@@ -234,44 +261,44 @@ class SfincsInput:
 
         if self.model.grid.type == "quadtree":
             # Get rid of grid stuff
-            variables.x0               = None
-            variables.y0               = None
-            variables.dx               = None
-            variables.dy               = None
-            variables.nmax             = None
-            variables.mmax             = None
-            variables.rotation         = None
-            variables.depfile          = None # Depth is stored in the qtr file
+            variables.x0 = None
+            variables.y0 = None
+            variables.dx = None
+            variables.dy = None
+            variables.nmax = None
+            variables.mmax = None
+            variables.rotation = None
+            variables.depfile = None  # Depth is stored in the qtr file
         else:
-            variables.qtrfile          = None    
+            variables.qtrfile = None
 
         if not self.model.input.variables.snapwave:
             # Get rid of SnapWave stuff
-            variables.snapwave             = None
-            variables.dtwave               = None
-            variables.snapwave_gamma       = None
-            variables.snapwave_dtheta      = None
-            variables.snapwave_hmin        = None
-            variables.snapwave_fw0         = None
-            variables.snapwave_bndfile     = None
-            variables.snapwave_bhsfile     = None
-            variables.snapwave_btpfile     = None
-            variables.snapwave_bwdfile     = None
-            variables.snapwave_bdsfile     = None
-            variables.snapwave_crit        = None
-            variables.snapwave_igwaves     = None
-            variables.snapwave_nrsweeps    = None
-            variables.storefw              = None
-            variables.wvmfile              = None
-        else:    
+            variables.snapwave = None
+            variables.dtwave = None
+            variables.snapwave_gamma = None
+            variables.snapwave_dtheta = None
+            variables.snapwave_hmin = None
+            variables.snapwave_fw0 = None
+            variables.snapwave_bndfile = None
+            variables.snapwave_bhsfile = None
+            variables.snapwave_btpfile = None
+            variables.snapwave_bwdfile = None
+            variables.snapwave_bdsfile = None
+            variables.snapwave_crit = None
+            variables.snapwave_igwaves = None
+            variables.snapwave_nrsweeps = None
+            variables.storefw = None
+            variables.wvmfile = None
+        else:
             if len(self.model.wave_makers.gdf) == 0:
                 variables.wvmfile = None
 
         if variables.sbgfile is not None:
-            variables.manning              = None
-            variables.manning_land         = None
-            variables.manning_sea          = None
-            variables.rgh_lev_land         = None
+            variables.manning = None
+            variables.manning_land = None
+            variables.manning_sea = None
+            variables.rgh_lev_land = None
 
         if variables.rugfile is None:
             variables.rugdepth = None
@@ -279,27 +306,26 @@ class SfincsInput:
         if not variables.store_dynamic_bed_level:
             variables.store_dynamic_bed_level = None
 
-        fid = open(input_file, "w")
-        for key, value in variables.__dict__.items():
-            if value is not None:
-                if type(value) == "float":
-                    string = f"{key.ljust(20)} = {float(value)}\n"
-                elif type(value) == "int":
-                    string = f"{key.ljust(20)} = {int(value)}\n"
-                elif isinstance(value, bool):
-                    if value:
-                        string = f"{key.ljust(20)} = {int(1)}\n"
-                    else:    
-                        string = f"{key.ljust(20)} = {int(0)}\n"
-                elif type(value) == list:
-                    valstr = ""
-                    for v in value:
-                        valstr += str(v) + " "
-                    string = f"{key.ljust(20)} = {valstr}\n"
-                elif isinstance(value, datetime.date):
-                    dstr = value.strftime("%Y%m%d %H%M%S")
-                    string = f"{key.ljust(20)} = {dstr}\n"
-                else:
-                    string = f"{key.ljust(20)} = {value}\n"
-                fid.write(string)
-        fid.close()
+        with open(input_file, "w") as fid:
+            for key, value in variables.__dict__.items():
+                if value is not None:
+                    if isinstance(value, float):
+                        string = f"{key.ljust(20)} = {float(value)}\n"
+                    elif isinstance(value, int):
+                        string = f"{key.ljust(20)} = {int(value)}\n"
+                    elif isinstance(value, bool):
+                        if value:
+                            string = f"{key.ljust(20)} = {int(1)}\n"
+                        else:
+                            string = f"{key.ljust(20)} = {int(0)}\n"
+                    elif isinstance(value, list):
+                        valstr = ""
+                        for v in value:
+                            valstr += str(v) + " "
+                        string = f"{key.ljust(20)} = {valstr}\n"
+                    elif isinstance(value, datetime.date):
+                        dstr = value.strftime("%Y%m%d %H%M%S")
+                        string = f"{key.ljust(20)} = {dstr}\n"
+                    else:
+                        string = f"{key.ljust(20)} = {value}\n"
+                    fid.write(string)

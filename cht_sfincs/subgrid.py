@@ -1,28 +1,47 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Apr 21 16:25:23 2022
+"""SFINCS subgrid table builder (legacy version).
 
-@author: ormondt
+Provides the SfincsSubgridTable class for building, reading, and writing
+subgrid look-up tables used by the SFINCS subgrid flood model.
 """
-import numpy as np
-from scipy import interpolate
+
 import os
+
+import numpy as np
 import xarray as xr
-from multiprocessing.pool import ThreadPool
+from scipy import interpolate
+
 # from numba import njit
 
-from cht_utils.interpolation import interp2
 # from cht_bathymetry.bathymetry_database import bathymetry_database
-    
-class SfincsSubgridTable:
 
-    def __init__(self, model, version=0):
+
+class SfincsSubgridTable:
+    """SFINCS subgrid look-up table (legacy version).
+
+    Stores the subgrid conveyance and volume tables for EACH cell and u/v
+    point in the quadtree mesh, regardless of mask value.
+
+    Parameters
+    ----------
+    model : SFINCS
+        The parent SFINCS model instance.
+    version : int, optional
+        Table format version number. Defaults to ``0``.
+    """
+
+    def __init__(self, model: "SFINCS", version: int = 0) -> None:
         # A subgrid table contains data for EACH cell, u and v point in the quadtree mesh,
         # regardless of the mask value!
         self.model = model
         self.version = version
 
-    def read(self):
+    def read(self) -> None:
+        """Read the subgrid table from a NetCDF file.
+
+        Returns
+        -------
+        None
+        """
 
         # Check if file exists
         if not self.model.input.variables.sbgfile:
@@ -30,90 +49,160 @@ class SfincsSubgridTable:
 
         file_name = os.path.join(self.model.path, self.model.input.variables.sbgfile)
         if not os.path.isfile(file_name):
-            print("File " + file_name + " does not exist!")
+            print(f"File {file_name} does not exist!")
             return
 
         # Read from netcdf file with xarray
         self.ds = xr.load_dataset(file_name)
         # self.ds.close() # Should this be closed ?
 
-    def write(self, file_name=None):
+    def write(self, file_name: str | None = None) -> None:
+        """Write the subgrid table to a NetCDF file.
+
+        Parameters
+        ----------
+        file_name : str, optional
+            Override output path. Defaults to ``<model.path>/<sbgfile>``.
+
+        Returns
+        -------
+        None
+        """
         if not file_name:
             if not self.model.input.variables.sbgfile:
                 return
-            file_name = os.path.join(self.model.path, self.model.input.variables.sbgfile)
+            file_name = os.path.join(
+                self.model.path, self.model.input.variables.sbgfile
+            )
 
         # Write XArray dataset to netcdf file
         self.ds.to_netcdf(file_name)
-        
-    def build(self,
-              bathymetry_sets,
-              roughness_sets,
-              manning_land=0.04,
-              manning_water=0.020,
-              manning_level=1.0,
-              nr_bins=None,
-              nr_levels=10,
-              nr_subgrid_pixels=20,
-              max_gradient=999.0,
-              depth_factor=1.0,
-              huthresh=0.01,
-              zmin=-999999.0,
-              zmax=999999.0,
-              weight_option="min",
-              file_name="",
-              bathymetry_database=None,
-              quiet=False,
-              progress_bar=None):  
 
+    def build(
+        self,
+        bathymetry_sets: list,
+        roughness_sets: list,
+        manning_land: float = 0.04,
+        manning_water: float = 0.020,
+        manning_level: float = 1.0,
+        nr_bins: int | None = None,
+        nr_levels: int = 10,
+        nr_subgrid_pixels: int = 20,
+        max_gradient: float = 999.0,
+        depth_factor: float = 1.0,
+        huthresh: float = 0.01,
+        zmin: float = -999999.0,
+        zmax: float = 999999.0,
+        weight_option: str = "min",
+        file_name: str = "",
+        bathymetry_database=None,
+        quiet: bool = False,
+        progress_bar=None,
+    ) -> None:
+        """Compute subgrid tables for all active cells and velocity points.
+
+        Samples high-resolution bathymetry and roughness data for each SFINCS
+        cell and writes the resulting lookup tables to a binary ``.sbg`` file.
+
+        Parameters
+        ----------
+        bathymetry_sets : list
+            Bathymetry dataset identifiers to pass to the database.
+        roughness_sets : list
+            Roughness dataset identifiers to pass to the database.
+        manning_land : float, optional
+            Default Manning's *n* for land cells.  Defaults to ``0.04``.
+        manning_water : float, optional
+            Default Manning's *n* for water cells.  Defaults to ``0.020``.
+        manning_level : float, optional
+            Elevation threshold separating land from water for roughness
+            assignment.  Defaults to ``1.0``.
+        nr_bins : int, optional
+            Alias for *nr_levels*.  When provided, overrides *nr_levels*.
+        nr_levels : int, optional
+            Number of elevation bins in each lookup table.  Defaults to ``10``.
+        nr_subgrid_pixels : int, optional
+            Number of sub-pixels per cell side used for sampling.
+            Defaults to ``20``.
+        max_gradient : float, optional
+            Maximum allowable bed-level gradient between sub-pixels (used to
+            detect data artefacts).  Defaults to ``999.0``.
+        depth_factor : float, optional
+            Multiplicative scaling applied to all sampled depths.
+            Defaults to ``1.0``.
+        huthresh : float, optional
+            Minimum water depth threshold.  Defaults to ``0.01``.
+        zmin : float, optional
+            Minimum elevation clamp.  Defaults to ``-999999.0``.
+        zmax : float, optional
+            Maximum elevation clamp.  Defaults to ``999999.0``.
+        weight_option : str, optional
+            Weighting scheme for aggregating sub-pixel values (``"min"`` or
+            ``"mean"``).  Defaults to ``"min"``.
+        file_name : str, optional
+            Output ``.sbg`` file path.  Defaults to ``sfincs.sbg`` in the
+            model directory.
+        bathymetry_database : optional
+            Bathymetry database object.  When ``None`` the module-level
+            singleton is imported from ``cht_bathymetry``.
+        quiet : bool, optional
+            Suppress progress messages.  Defaults to ``False``.
+        progress_bar : optional
+            Optional progress-bar object updated during cell processing.
+
+        Returns
+        -------
+        None
+        """
         # If filename is empty
         if not file_name:
             if self.model.input.variables.sbgfile:
-                file_name = os.path.join(self.model.path, self.model.input.variables.sbgfile)
+                file_name = os.path.join(
+                    self.model.path, self.model.input.variables.sbgfile
+                )
             else:
                 file_name = os.path.join(self.model.path, "sfincs.sbg")
                 self.model.input.variables.sbgfile = "sfincs.sbg"
 
         if nr_bins:
-            nr_levels = nr_bins 
+            nr_levels = nr_bins
 
         grid = self.model.grid
-        
+
         # Dimensions etc
-        refi   = nr_subgrid_pixels
+        refi = nr_subgrid_pixels
         nr_cells = grid.data.sizes["mesh2d_nFaces"]
-        nr_ref_levs = grid.data.attrs["nr_levels"] # number of refinement levels
-        cosrot = np.cos(grid.data.attrs["rotation"]*np.pi/180)
-        sinrot = np.sin(grid.data.attrs["rotation"]*np.pi/180)
-        nrmax  = 2000
+        nr_ref_levs = grid.data.attrs["nr_levels"]  # number of refinement levels
+        cosrot = np.cos(grid.data.attrs["rotation"] * np.pi / 180)
+        sinrot = np.sin(grid.data.attrs["rotation"] * np.pi / 180)
+        nrmax = 2000
         zminimum = zmin
         zmaximum = zmax
 
         # Grid neighbors (subtract 1 from indices to get zero-based indices)
         level = grid.data["level"].values[:] - 1
-        n     = grid.data["n"].values[:] - 1
-        m     = grid.data["m"].values[:] - 1
-        nu    = grid.data["nu"].values[:]
-        nu1   = grid.data["nu1"].values[:] - 1
-        nu2   = grid.data["nu2"].values[:] - 1
-        mu    = grid.data["mu"].values[:]
-        mu1   = grid.data["mu1"].values[:] - 1
-        mu2   = grid.data["mu2"].values[:] - 1
+        n = grid.data["n"].values[:] - 1
+        m = grid.data["m"].values[:] - 1
+        nu = grid.data["nu"].values[:]
+        nu1 = grid.data["nu1"].values[:] - 1
+        nu2 = grid.data["nu2"].values[:] - 1
+        mu = grid.data["mu"].values[:]
+        mu1 = grid.data["mu1"].values[:] - 1
+        mu2 = grid.data["mu2"].values[:] - 1
 
-        # U/V points 
+        # U/V points
         # Need to count the number of uv points in order allocate arrays (probably better to store this in the grid)
-        if self.model.grid.type == "quadtree":   
-
+        if self.model.grid.type == "quadtree":
             # Loop through cells to count number of velocity points
             npuv = 0
             for ip in range(nr_cells):
-                if mu1[ip]>=0:
+                if mu1[ip] >= 0:
                     npuv += 1
-                if mu2[ip]>=0:
+                if mu2[ip] >= 0:
                     npuv += 1
-                if nu1[ip]>=0:
+                if nu1[ip] >= 0:
                     npuv += 1
-                if nu2[ip]>=0:
+                if nu2[ip] >= 0:
                     npuv += 1
 
             # Allocate some arrays with info about the uv points
@@ -125,9 +214,9 @@ class SfincsSubgridTable:
             # Determine what type of uv point it is
             ip = -1
             for ic in range(nr_cells):
-                if mu[ic]<=0:
+                if mu[ic] <= 0:
                     # Regular or coarser to the right
-                    if mu1[ic]>=0:
+                    if mu1[ic] >= 0:
                         ip += 1
                         uv_index_z_nm[ip] = ic
                         uv_index_z_nmu[ip] = mu1[ic]
@@ -135,23 +224,23 @@ class SfincsSubgridTable:
                         uv_flags_level[ip] = level[ic]
                         uv_flags_type[ip] = mu[ic]
                 else:
-                    if mu1[ic]>=0:
+                    if mu1[ic] >= 0:
                         ip += 1
                         uv_index_z_nm[ip] = ic
                         uv_index_z_nmu[ip] = mu1[ic]
-                        uv_flags_dir[ip] = 0 # x
+                        uv_flags_dir[ip] = 0  # x
                         uv_flags_level[ip] = level[ic] + 1
                         uv_flags_type[ip] = mu[ic]
-                    if mu2[ic]>=0:
+                    if mu2[ic] >= 0:
                         ip += 1
                         uv_index_z_nm[ip] = ic
                         uv_index_z_nmu[ip] = mu2[ic]
-                        uv_flags_dir[ip] = 0 # x
+                        uv_flags_dir[ip] = 0  # x
                         uv_flags_level[ip] = level[ic] + 1
                         uv_flags_type[ip] = mu[ic]
-                if nu[ic]<=0:
+                if nu[ic] <= 0:
                     # Regular or coarser above
-                    if nu1[ic]>=0:
+                    if nu1[ic] >= 0:
                         ip += 1
                         uv_index_z_nm[ip] = ic
                         uv_index_z_nmu[ip] = nu1[ic]
@@ -159,22 +248,22 @@ class SfincsSubgridTable:
                         uv_flags_level[ip] = level[ic]
                         uv_flags_type[ip] = nu[ic]
                 else:
-                    if nu1[ic]>=0:
+                    if nu1[ic] >= 0:
                         ip += 1
                         uv_index_z_nm[ip] = ic
                         uv_index_z_nmu[ip] = nu1[ic]
-                        uv_flags_dir[ip] = 1 # y
+                        uv_flags_dir[ip] = 1  # y
                         uv_flags_level[ip] = level[ic] + 1
                         uv_flags_type[ip] = nu[ic]
-                    if nu2[ic]>=0:
+                    if nu2[ic] >= 0:
                         ip += 1
                         uv_index_z_nm[ip] = ic
                         uv_index_z_nmu[ip] = nu2[ic]
                         uv_flags_dir[ip] = 1
                         uv_flags_level[ip] = level[ic] + 1
-                        uv_flags_type[ip] = nu[ic]       
+                        uv_flags_type[ip] = nu[ic]
 
-            npc = nr_cells   
+            npc = nr_cells
 
         else:
             # For regular grids, only the points with mask>0 are stored
@@ -182,7 +271,7 @@ class SfincsSubgridTable:
             index_nu2 = np.zeros(nr_cells, dtype=int) - 1
             index_mu1 = np.zeros(nr_cells, dtype=int) - 1
             index_mu2 = np.zeros(nr_cells, dtype=int) - 1
-            index_nm  = np.zeros(nr_cells, dtype=int) - 1
+            index_nm = np.zeros(nr_cells, dtype=int) - 1
             npuv = 0
             npc = 0
             # Loop through all cells
@@ -191,19 +280,19 @@ class SfincsSubgridTable:
                 if grid.data["mask"].values[ip] > 0:
                     index_nm[ip] = npc
                     npc += 1
-                    if mu1[ip]>=0:
+                    if mu1[ip] >= 0:
                         if grid.data["mask"].values[mu1[ip]] > 0:
                             index_mu1[ip] = npuv
                             npuv += 1
-                    if mu2[ip]>=0:
+                    if mu2[ip] >= 0:
                         if grid.data["mask"].values[mu2[ip]] > 0:
                             index_mu2[ip] = npuv
                             npuv += 1
-                    if nu1[ip]>=0:
+                    if nu1[ip] >= 0:
                         if grid.data["mask"].values[nu1[ip]] > 0:
                             index_nu1[ip] = npuv
                             npuv += 1
-                    if nu2[ip]>=0:
+                    if nu2[ip] >= 0:
                         if grid.data["mask"].values[nu2[ip]] > 0:
                             index_nu2[ip] = npuv
                             npuv += 1
@@ -214,119 +303,160 @@ class SfincsSubgridTable:
         self.ds["z_zmin"] = xr.DataArray(np.zeros(npc), dims=["np"])
         self.ds["z_zmax"] = xr.DataArray(np.zeros(npc), dims=["np"])
         self.ds["z_volmax"] = xr.DataArray(np.zeros(npc), dims=["np"])
-        self.ds["z_level"] = xr.DataArray(np.zeros((npc, nr_levels)), dims=["np", "levels"])
+        self.ds["z_level"] = xr.DataArray(
+            np.zeros((npc, nr_levels)), dims=["np", "levels"]
+        )
         self.ds["uv_zmin"] = xr.DataArray(np.zeros(npuv), dims=["npuv"])
         self.ds["uv_zmax"] = xr.DataArray(np.zeros(npuv), dims=["npuv"])
-        self.ds["uv_havg"] = xr.DataArray(np.zeros((npuv, nr_levels)), dims=["npuv", "levels"])
-        self.ds["uv_nrep"] = xr.DataArray(np.zeros((npuv, nr_levels)), dims=["npuv", "levels"])
-        self.ds["uv_pwet"] = xr.DataArray(np.zeros((npuv, nr_levels)), dims=["npuv", "levels"])
+        self.ds["uv_havg"] = xr.DataArray(
+            np.zeros((npuv, nr_levels)), dims=["npuv", "levels"]
+        )
+        self.ds["uv_nrep"] = xr.DataArray(
+            np.zeros((npuv, nr_levels)), dims=["npuv", "levels"]
+        )
+        self.ds["uv_pwet"] = xr.DataArray(
+            np.zeros((npuv, nr_levels)), dims=["npuv", "levels"]
+        )
         self.ds["uv_ffit"] = xr.DataArray(np.zeros(npuv), dims=["npuv"])
         self.ds["uv_navg"] = xr.DataArray(np.zeros(npuv), dims=["npuv"])
-        
+
         # Determine first indices and number of cells per refinement level
         ifirst = np.zeros(nr_ref_levs, dtype=int)
-        ilast  = np.zeros(nr_ref_levs, dtype=int)
+        ilast = np.zeros(nr_ref_levs, dtype=int)
         nr_cells_per_level = np.zeros(nr_ref_levs, dtype=int)
         ireflast = -1
         for ic in range(nr_cells):
-            if level[ic]>ireflast:
+            if level[ic] > ireflast:
                 ifirst[level[ic]] = ic
                 ireflast = level[ic]
         for ilev in range(nr_ref_levs - 1):
             ilast[ilev] = ifirst[ilev + 1] - 1
         ilast[nr_ref_levs - 1] = nr_cells - 1
         for ilev in range(nr_ref_levs):
-            nr_cells_per_level[ilev] = ilast[ilev] - ifirst[ilev] + 1 
+            nr_cells_per_level[ilev] = ilast[ilev] - ifirst[ilev] + 1
 
         # Loop through all levels
         for ilev in range(nr_ref_levs):
-
             if not quiet:
                 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-                print("Processing level " + str(ilev + 1) + " of " + str(nr_ref_levs) + " ...")
-            
+                print(
+                    "Processing level "
+                    + str(ilev + 1)
+                    + " of "
+                    + str(nr_ref_levs)
+                    + " ..."
+                )
+
             # Make blocks off cells in this level only
             cell_indices_in_level = np.arange(ifirst[ilev], ilast[ilev] + 1, dtype=int)
             nr_cells_in_level = np.size(cell_indices_in_level)
-            
+
             if nr_cells_in_level == 0:
                 continue
 
-            n0 = np.min(n[ifirst[ilev]:ilast[ilev] + 1])
-            n1 = np.max(n[ifirst[ilev]:ilast[ilev] + 1]) # + 1 # add extra cell to compute u and v in the last row/column
-            m0 = np.min(m[ifirst[ilev]:ilast[ilev] + 1])
-            m1 = np.max(m[ifirst[ilev]:ilast[ilev] + 1]) # + 1 # add extra cell to compute u and v in the last row/column
-            
-            dx   = grid.data.attrs["dx"] / 2**ilev      # cell size
-            dy   = grid.data.attrs["dy"] / 2**ilev      # cell size
-            dxp  = dx/refi              # size of subgrid pixel
-            dyp  = dy/refi              # size of subgrid pixel
-            
-            nrcb = int(np.floor(nrmax/refi))         # nr of regular cells in a block            
-            nrbn = int(np.ceil((n1 - n0 + 1)/nrcb))  # nr of blocks in n direction
-            nrbm = int(np.ceil((m1 - m0 + 1)/nrcb))  # nr of blocks in m direction
+            n0 = np.min(n[ifirst[ilev] : ilast[ilev] + 1])
+            n1 = np.max(
+                n[ifirst[ilev] : ilast[ilev] + 1]
+            )  # + 1 # add extra cell to compute u and v in the last row/column
+            m0 = np.min(m[ifirst[ilev] : ilast[ilev] + 1])
+            m1 = np.max(
+                m[ifirst[ilev] : ilast[ilev] + 1]
+            )  # + 1 # add extra cell to compute u and v in the last row/column
+
+            dx = grid.data.attrs["dx"] / 2**ilev  # cell size
+            dy = grid.data.attrs["dy"] / 2**ilev  # cell size
+            dxp = dx / refi  # size of subgrid pixel
+            dyp = dy / refi  # size of subgrid pixel
+
+            nrcb = int(np.floor(nrmax / refi))  # nr of regular cells in a block
+            nrbn = int(np.ceil((n1 - n0 + 1) / nrcb))  # nr of blocks in n direction
+            nrbm = int(np.ceil((m1 - m0 + 1) / nrcb))  # nr of blocks in m direction
 
             if not quiet:
-                print("Number of regular cells in a block : " + str(nrcb))
-                print("Number of blocks in n direction    : " + str(nrbn))
-                print("Number of blocks in m direction    : " + str(nrbm))
-            
+                print(f"Number of regular cells in a block : {nrcb}")
+                print(f"Number of blocks in n direction    : {nrbn}")
+                print(f"Number of blocks in m direction    : {nrbm}")
+
             if not quiet:
-                print("Grid size of flux grid             : dx= " + str(dx) + ", dy= " + str(dy))
-                print("Grid size of subgrid pixels        : dx= " + str(dxp) + ", dy= " + str(dyp))
+                print(
+                    "Grid size of flux grid             : dx= "
+                    + str(dx)
+                    + ", dy= "
+                    + str(dy)
+                )
+                print(
+                    "Grid size of subgrid pixels        : dx= "
+                    + str(dxp)
+                    + ", dy= "
+                    + str(dyp)
+                )
 
             ## Loop through blocks
             ibt = 1
             if progress_bar:
-                progress_bar.set_text("               Generating Sub-grid Tables (level " + str(ilev) + ") ...                ")
+                progress_bar.set_text(
+                    "               Generating Sub-grid Tables (level "
+                    + str(ilev)
+                    + ") ...                "
+                )
                 progress_bar.set_maximum(nrbm * nrbn)
 
-            # Start with the cell centres (do uv points next)    
+            # Start with the cell centres (do uv points next)
 
             ib = -1
             for ii in range(nrbm):
                 for jj in range(nrbn):
-
                     # Count
                     ib += 1
-                    
-                    bn0 = n0  + jj*nrcb               # Index of first n in block
-                    bn1 = min(bn0 + nrcb - 1, n1) + 1 # Index of last n in block (cut off excess above, but add extra cell to compute u and v in the last row)
-                    bm0 = m0  + ii*nrcb               # Index of first m in block
-                    bm1 = min(bm0 + nrcb - 1, m1) + 1 # Index of last m in block (cut off excess to the right, but add extra cell to compute u and v in the last column)
+
+                    bn0 = n0 + jj * nrcb  # Index of first n in block
+                    bn1 = (
+                        min(bn0 + nrcb - 1, n1) + 1
+                    )  # Index of last n in block (cut off excess above, but add extra cell to compute u and v in the last row)
+                    bm0 = m0 + ii * nrcb  # Index of first m in block
+                    bm1 = (
+                        min(bm0 + nrcb - 1, m1) + 1
+                    )  # Index of last m in block (cut off excess to the right, but add extra cell to compute u and v in the last column)
 
                     if not quiet:
-                        print("--------------------------------------------------------------")
-                        print("Processing block " + str(ib + 1) + " of " + str(nrbn*nrbm) + " ...")
+                        print(
+                            "--------------------------------------------------------------"
+                        )
+                        print(
+                            "Processing block "
+                            + str(ib + 1)
+                            + " of "
+                            + str(nrbn * nrbm)
+                            + " ..."
+                        )
                         print("Getting bathy/topo ...")
 
                     # Now build the pixel matrix
-                    x00 = 0.5*dxp + bm0*refi*dxp
-                    x01 = x00 + (bm1 - bm0 + 1)*refi*dxp
-                    y00 = 0.5*dyp + bn0*refi*dyp
-                    y01 = y00 + (bn1 - bn0 + 1)*refi*dyp
-                    
+                    x00 = 0.5 * dxp + bm0 * refi * dxp
+                    x01 = x00 + (bm1 - bm0 + 1) * refi * dxp
+                    y00 = 0.5 * dyp + bn0 * refi * dyp
+                    y01 = y00 + (bn1 - bn0 + 1) * refi * dyp
+
                     x0 = np.arange(x00, x01, dxp)
                     y0 = np.arange(y00, y01, dyp)
                     xg0, yg0 = np.meshgrid(x0, y0)
                     # Rotate and translate
-                    xg = grid.data.attrs["x0"] + cosrot*xg0 - sinrot*yg0
-                    yg = grid.data.attrs["y0"] + sinrot*xg0 + cosrot*yg0                    
+                    xg = grid.data.attrs["x0"] + cosrot * xg0 - sinrot * yg0
+                    yg = grid.data.attrs["y0"] + sinrot * xg0 + cosrot * yg0
 
                     # Clear variables
                     del x0, y0, xg0, yg0
-                    
+
                     # Get bathymetry on subgrid from bathymetry database
-                    zg = bathymetry_database.get_bathymetry_on_grid(xg, yg,
-                                                                    self.model.crs,
-                                                                    bathymetry_sets,
-                                                                    method="linear")
-                                        
+                    zg = bathymetry_database.get_bathymetry_on_grid(
+                        xg, yg, self.model.crs, bathymetry_sets, method="linear"
+                    )
+
                     # Multiply zg with depth factor (had to use 0.9746 to get arrival
                     # times right in the Pacific)
-                    zg = zg*depth_factor
+                    zg = zg * depth_factor
 
-                    # Set minimum depth                    
+                    # Set minimum depth
                     zg = np.maximum(zg, zminimum)
                     zg = np.minimum(zg, zmaximum)
 
@@ -336,29 +466,36 @@ class SfincsSubgridTable:
                     # Now compute subgrid properties
 
                     # First we loop through all the possible cells in this block
-                    index_cells_in_block = np.zeros(nrcb*nrcb, dtype=int)
+                    index_cells_in_block = np.zeros(nrcb * nrcb, dtype=int)
 
                     # Loop through all cells in this level
                     nr_cells_in_block = 0
                     for ic in range(nr_cells_in_level):
-                        indx = cell_indices_in_level[ic] # index of the whole quadtree
-                        if n[indx]>=bn0 and n[indx]<bn1 and m[indx]>=bm0 and m[indx]<bm1:
+                        indx = cell_indices_in_level[ic]  # index of the whole quadtree
+                        if (
+                            n[indx] >= bn0
+                            and n[indx] < bn1
+                            and m[indx] >= bm0
+                            and m[indx] < bm1
+                        ):
                             # Cell falls inside block
                             index_cells_in_block[nr_cells_in_block] = indx
                             nr_cells_in_block += 1
                     index_cells_in_block = index_cells_in_block[0:nr_cells_in_block]
 
                     if not quiet:
-                        print("Number of active cells in block    : " + str(nr_cells_in_block))
+                        print(
+                            "Number of active cells in block    : "
+                            + str(nr_cells_in_block)
+                        )
 
                     # # Loop through all active cells in this block
                     for ic in range(nr_cells_in_block):
-                        
-                        indx = index_cells_in_block[ic] # nm index
+                        indx = index_cells_in_block[ic]  # nm index
 
                         # Pixel indices for this cell
-                        nn  = (n[indx] - bn0) * refi
-                        mm  = (m[indx] - bm0) * refi
+                        nn = (n[indx] - bn0) * refi
+                        mm = (m[indx] - bm0) * refi
                         zgc = zg[nn : nn + refi, mm : mm + refi]
 
                         # Compute pixel size in metres
@@ -366,52 +503,69 @@ class SfincsSubgridTable:
                             # ygc = yg[nn : nn + refi, mm : mm + refi]
                             # mean_lat =np.abs(np.mean(ygc))
                             mean_lat = yg[0, 0]
-                            dxpm = dxp*111111.0*np.cos(np.pi*mean_lat/180.0)
-                            dypm = dyp*111111.0
+                            dxpm = dxp * 111111.0 * np.cos(np.pi * mean_lat / 180.0)
+                            dypm = dyp * 111111.0
                         else:
                             dxpm = dxp
                             dypm = dyp
-                        
-                        zv  = zgc.flatten()   
-                        zvmin = -20.0
-                        z, v, zmin, zmax, zmean = subgrid_v_table(zv, dxpm, dypm, nr_levels, zvmin, max_gradient)
 
-                        # Check if this is an active point 
+                        zv = zgc.flatten()
+                        zvmin = -20.0
+                        z, v, zmin, zmax, zmean = subgrid_v_table(
+                            zv, dxpm, dypm, nr_levels, zvmin, max_gradient
+                        )
+
+                        # Check if this is an active point
                         if indx > -1:
-                            self.ds["z_zmin"][indx]    = zmin
-                            self.ds["z_zmax"][indx]    = zmax
-                            self.ds["z_volmax"][indx]  = v[-1]
-                            self.ds["z_level"][indx,:] = z
+                            self.ds["z_zmin"][indx] = zmin
+                            self.ds["z_zmax"][indx] = zmax
+                            self.ds["z_volmax"][indx] = v[-1]
+                            self.ds["z_level"][indx, :] = z
 
             # Now do the u/v points
             # Loop through blocks
             ib = -1
             for ii in range(nrbm):
                 for jj in range(nrbn):
-                    
                     # Count
                     ib += 1
                     if not quiet:
-                        print("--------------------------------------------------------------")
-                        print("Processing U/V points in block " + str(ib + 1) + " of " + str(nrbn*nrbm) + " ...")
-                    
-                    bn0 = n0  + jj*nrcb               # Index of first n in block
-                    bn1 = min(bn0 + nrcb - 1, n1) + 1 # Index of last n in block (cut off excess above, but add extra cell to compute u and v in the last row)
-                    bm0 = m0  + ii*nrcb               # Index of first m in block
-                    bm1 = min(bm0 + nrcb - 1, m1) + 1 # Index of last m in block (cut off excess to the right, but add extra cell to compute u and v in the last column)
+                        print(
+                            "--------------------------------------------------------------"
+                        )
+                        print(
+                            "Processing U/V points in block "
+                            + str(ib + 1)
+                            + " of "
+                            + str(nrbn * nrbm)
+                            + " ..."
+                        )
+
+                    bn0 = n0 + jj * nrcb  # Index of first n in block
+                    bn1 = (
+                        min(bn0 + nrcb - 1, n1) + 1
+                    )  # Index of last n in block (cut off excess above, but add extra cell to compute u and v in the last row)
+                    bm0 = m0 + ii * nrcb  # Index of first m in block
+                    bm1 = (
+                        min(bm0 + nrcb - 1, m1) + 1
+                    )  # Index of last m in block (cut off excess to the right, but add extra cell to compute u and v in the last column)
 
                     # Now build the pixel matrix
-                    x00 = 0.5*dxp + bm0*refi*dxp - 0.5*refi*dxp # start half a cell to the left
-                    x01 = x00 + (bm1 - bm0 + 1)*refi*dxp
-                    y00 = 0.5*dyp + bn0*refi*dyp - 0.5*refi*dyp # start half a cell below
-                    y01 = y00 + (bn1 - bn0 + 1)*refi*dyp
-                    
+                    x00 = (
+                        0.5 * dxp + bm0 * refi * dxp - 0.5 * refi * dxp
+                    )  # start half a cell to the left
+                    x01 = x00 + (bm1 - bm0 + 1) * refi * dxp
+                    y00 = (
+                        0.5 * dyp + bn0 * refi * dyp - 0.5 * refi * dyp
+                    )  # start half a cell below
+                    y01 = y00 + (bn1 - bn0 + 1) * refi * dyp
+
                     x0 = np.arange(x00, x01, dxp)
                     y0 = np.arange(y00, y01, dyp)
                     xg0, yg0 = np.meshgrid(x0, y0)
                     # Rotate and translate
-                    xg = grid.data.attrs["x0"] + cosrot*xg0 - sinrot*yg0
-                    yg = grid.data.attrs["y0"] + sinrot*xg0 + cosrot*yg0                    
+                    xg = grid.data.attrs["x0"] + cosrot * xg0 - sinrot * yg0
+                    yg = grid.data.attrs["y0"] + sinrot * xg0 + cosrot * yg0
 
                     # Clear variables
                     del x0, y0, xg0, yg0
@@ -420,15 +574,15 @@ class SfincsSubgridTable:
                         print("Getting bathy/topo ...")
 
                     # Get bathymetry on subgrid from bathymetry database
-                    zg = bathymetry_database.get_bathymetry_on_grid(xg, yg,
-                                                                    self.model.crs,
-                                                                    bathymetry_sets)
-                    
+                    zg = bathymetry_database.get_bathymetry_on_grid(
+                        xg, yg, self.model.crs, bathymetry_sets
+                    )
+
                     # Multiply zg with depth factor (had to use 0.9746 to get arrival
                     # times right in the Pacific)
-                    zg = zg*depth_factor
+                    zg = zg * depth_factor
 
-                    # Set minimum depth                    
+                    # Set minimum depth
                     zg = np.maximum(zg, zminimum)
                     zg = np.minimum(zg, zmaximum)
 
@@ -436,27 +590,27 @@ class SfincsSubgridTable:
                     zg[np.isnan(zg)] = 0.0
 
                     # Manning's n values
-                    
+
                     # Initialize roughness of subgrid at NaN
                     manning_grid = np.full(np.shape(xg), np.nan)
 
-                    if roughness_sets: # this still needs to be implemented
-                        manning_grid = bathymetry_database.get_bathymetry_on_grid(xg, yg,
-                                                                        self.model.crs,
-                                                                        roughness_sets)
+                    if roughness_sets:  # this still needs to be implemented
+                        manning_grid = bathymetry_database.get_bathymetry_on_grid(
+                            xg, yg, self.model.crs, roughness_sets
+                        )
 
                     # Fill in remaining NaNs with default values
                     isn = np.where(np.isnan(manning_grid))
                     try:
-                        manning_grid[(isn and np.where(zg<=manning_level))] = manning_water
-                    except:
+                        manning_grid[(isn and np.where(zg <= manning_level))] = (
+                            manning_water
+                        )
+                    except Exception:
                         pass
-                    manning_grid[(isn and np.where(zg>manning_level))] = manning_land
-
+                    manning_grid[(isn and np.where(zg > manning_level))] = manning_land
 
                     # Loop through uv points an see if they are in this block (and at this level)
                     for ip in range(npuv):
-
                         # Check if this uv point is at the correct level
                         if uv_flags_level[ip] != ilev:
                             continue
@@ -469,71 +623,81 @@ class SfincsSubgridTable:
 
                         # Now build the pixel matrix
                         if uv_flags_type[ip] <= 0:
-
                             # Normal point
 
-                            if n[nm] < bn0 or n[nm] >= bn1 or m[nm] < bm0 or m[nm] >= bm1:
+                            if (
+                                n[nm] < bn0
+                                or n[nm] >= bn1
+                                or m[nm] < bm0
+                                or m[nm] >= bm1
+                            ):
                                 # Outside block
                                 continue
 
                             if uv_flags_dir[ip] == 0:
                                 # x
-                                nn  = (n[nm] - bn0) * refi
-                                mm  = (m[nm] - bm0) * refi + int(0.5*refi)
+                                nn = (n[nm] - bn0) * refi
+                                mm = (m[nm] - bm0) * refi + int(0.5 * refi)
                             else:
                                 # y
-                                nn  = (n[nm] - bn0) * refi + int(0.5*refi)
-                                mm  = (m[nm] - bm0) * refi
+                                nn = (n[nm] - bn0) * refi + int(0.5 * refi)
+                                mm = (m[nm] - bm0) * refi
 
-                        else: # uv_flags_type[ip] == 1
-
-                            if n[nmu] < bn0 or n[nmu] >= bn1 or m[nmu] < bm0 or m[nmu] >= bm1:
+                        else:  # uv_flags_type[ip] == 1
+                            if (
+                                n[nmu] < bn0
+                                or n[nmu] >= bn1
+                                or m[nmu] < bm0
+                                or m[nmu] >= bm1
+                            ):
                                 # Outside block
                                 continue
 
                             # Coarse to fine
                             if uv_flags_dir[ip] == 0:
                                 # x
-                                nn  = (n[nmu] - bn0) * refi
-                                mm  = (m[nmu] - bm0) * refi - int(0.5*refi)
+                                nn = (n[nmu] - bn0) * refi
+                                mm = (m[nmu] - bm0) * refi - int(0.5 * refi)
                             else:
                                 # y
-                                nn  = (n[nmu] - bn0) * refi - int(0.5*refi)
-                                mm  = (m[nmu] - bm0) * refi
+                                nn = (n[nmu] - bn0) * refi - int(0.5 * refi)
+                                mm = (m[nmu] - bm0) * refi
 
                         # Pixel Block actually starts half a grid cell to the left and below, so need to add 0.5*refi
-                        nn += int(0.5*refi)
-                        mm += int(0.5*refi)
+                        nn += int(0.5 * refi)
+                        mm += int(0.5 * refi)
 
                         # Pixel indices for this cell
                         zgu = zg[nn : nn + refi, mm : mm + refi]
                         manning = manning_grid[nn : nn + refi, mm : mm + refi]
- 
+
                         if uv_flags_dir[ip] == 0:
                             zgu = np.transpose(zgu)
                             manning = np.transpose(manning)
 
-                        zv  = zgu.flatten()
+                        zv = zgu.flatten()
                         manning = manning.flatten()
 
                         z_zmin_nm = self.ds["z_zmin"].values[nm]
                         z_zmin_nmu = self.ds["z_zmin"].values[nmu]
-                        zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(zv,
-                                                                                       manning,
-                                                                                       nr_levels,
-                                                                                       huthresh,
-                                                                                       2,
-                                                                                       z_zmin_nm,
-                                                                                       z_zmin_nmu,
-                                                                                       weight_option)
+                        zmin, zmax, havg, nrep, pwet, ffit, navg, zz = subgrid_q_table(
+                            zv,
+                            manning,
+                            nr_levels,
+                            huthresh,
+                            2,
+                            z_zmin_nm,
+                            z_zmin_nmu,
+                            weight_option,
+                        )
 
-                        self.ds["uv_zmin"][ip]   = zmin
-                        self.ds["uv_zmax"][ip]   = zmax
-                        self.ds["uv_havg"][ip,:] = havg
-                        self.ds["uv_nrep"][ip,:] = nrep
-                        self.ds["uv_pwet"][ip,:] = pwet
-                        self.ds["uv_ffit"][ip]   = ffit
-                        self.ds["uv_navg"][ip]   = navg
+                        self.ds["uv_zmin"][ip] = zmin
+                        self.ds["uv_zmax"][ip] = zmax
+                        self.ds["uv_havg"][ip, :] = havg
+                        self.ds["uv_nrep"][ip, :] = nrep
+                        self.ds["uv_pwet"][ip, :] = pwet
+                        self.ds["uv_ffit"][ip] = ffit
+                        self.ds["uv_navg"][ip] = navg
 
                     if progress_bar:
                         progress_bar.set_value(ibt)
@@ -543,7 +707,7 @@ class SfincsSubgridTable:
 
         if not quiet:
             print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-        
+
         if file_name:
             self.write(file_name)
 
@@ -595,18 +759,18 @@ class SfincsSubgridTable:
 #     else:
 #         dxpm = dxp
 #         dypm = dyp
-    
-#     zv  = zgc.flatten()   
+
+#     zv  = zgc.flatten()
 #     zvmin = -20.0
 #     z, v, zmin, zmax, zmean = subgrid_v_table(zv, dxpm, dypm, nr_levels, zvmin, max_gradient)
 
-#     # Check if this is an active point 
+#     # Check if this is an active point
 #     if index_nm[indx] > -1:
 #         ds["z_zmin"][index_nm[indx]]    = zmin
 #         ds["z_zmax"][index_nm[indx]]    = zmax
 #         ds["z_volmax"][index_nm[indx]]  = v[-1]
 #         ds["z_level"][index_nm[indx],:] = z
-    
+
 #     # Now the U/V points
 #     # First right
 #     if mu[indx] <= 0:
@@ -735,20 +899,39 @@ class SfincsSubgridTable:
 #                 ds["uv_navg"][iuv]   = navg
 
 
-
 # @njit
-def subgrid_v_table(elevation, dx, dy, nlevels, zvolmin, max_gradient):
-    """
-    map vector of elevation values into a hypsometric volume - depth relationship for one grid cell
+def subgrid_v_table(
+    elevation: np.ndarray,
+    dx: float,
+    dy: float,
+    nlevels: int,
+    zvolmin: float,
+    max_gradient: float,
+) -> tuple:
+    """Map sub-pixel elevations into a hypsometric volume–depth table for one cell.
+
     Parameters
     ----------
-    elevation : np.ndarray (nr of pixels in one cell) containing subgrid elevation values for one grid cell [m]
-    dx: float, x-directional cell size (typically not known at this level) [m]
-    dy: float, y-directional cell size (typically not known at this level) [m]
-    Return
-    ------
-    ele_sort : np.ndarray (1D flattened from elevation) with sorted and flattened elevation values
-    volume : np.ndarray (1D flattened from elevation) containing volumes (lowest value zero) per sorted elevation value
+    elevation : numpy.ndarray
+        Sub-pixel elevation values for one grid cell [m].
+    dx : float
+        Cell size in the x-direction [m].
+    dy : float
+        Cell size in the y-direction [m].
+    nlevels : int
+        Number of discrete vertical levels in the lookup table.
+    zvolmin : float
+        Minimum elevation used when clipping sub-pixel values.
+    max_gradient : float
+        Maximum allowable dz/dh gradient; iterations reshape the table until
+        this constraint is satisfied.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray, float, float, float]
+        ``(z, V, zmin, zmax, zmean)`` where *z* is the elevation array,
+        *V* is the volume array, and *zmin*, *zmax*, *zmean* are cell
+        statistics.
     """
 
     def get_dzdh(z, V, a):
@@ -759,33 +942,35 @@ def subgrid_v_table(elevation, dx, dy, nlevels, zvolmin, max_gradient):
         return dz / dh
 
     # Cell area
-    a = np.size(elevation)*dx*dy
+    a = np.size(elevation) * dx * dy
 
     # Create ele_sort and limit to zvolmin (-20.0, needed with single precision) and zvolmax
     zvolmax = 100000.0
     ele_sort = np.minimum(np.maximum(elevation, zvolmin), zvolmax).flatten()
     # Add tiny random number to each elevation to avoid equal values
-    ele_sort += 1.0e-6*np.random.rand(np.size(ele_sort)) - 0.5e-6
+    ele_sort += 1.0e-6 * np.random.rand(np.size(ele_sort)) - 0.5e-6
     # And sort
     ele_sort = np.sort(ele_sort)
-        
+
     depth = ele_sort - ele_sort.min()
 
     volume = np.cumsum((np.diff(depth) * dx * dy) * np.arange(len(depth))[1:])
     # add trailing zero for first value
     volume = np.concatenate([np.array([0]), volume])
-    
+
     # Resample volumes to discrete levels
-    steps = np.arange(nlevels)/(nlevels - 1)
-    V = steps*volume.max()
-    dvol = volume.max()/(nlevels - 1)
+    steps = np.arange(nlevels) / (nlevels - 1)
+    V = steps * volume.max()
+    dvol = volume.max() / (nlevels - 1)
     z = interpolate.interp1d(volume, ele_sort)(V)
     dzdh = get_dzdh(z, V, a)
     n = 0
-    while ((dzdh.max() > max_gradient and not(np.isclose(dzdh.max(), max_gradient))) and n < nlevels):
+    while (
+        dzdh.max() > max_gradient and not (np.isclose(dzdh.max(), max_gradient))
+    ) and n < nlevels:
         # reshape until gradient is satisfactory
         idx = np.where(dzdh == dzdh.max())[0]
-        z[idx + 1] = z[idx] + max_gradient*(dvol/a)
+        z[idx + 1] = z[idx] + max_gradient * (dvol / a)
         dzdh = get_dzdh(z, V, a)
         n += 1
 
@@ -797,6 +982,7 @@ def subgrid_v_table(elevation, dx, dy, nlevels, zvolmin, max_gradient):
 
     return z, V, zmin, zmax, zmean
 
+
 # @njit
 def subgrid_q_table(
     elevation: np.ndarray,
@@ -806,7 +992,7 @@ def subgrid_q_table(
     option: int = 2,
     z_zmin_a: float = -99999.0,
     z_zmin_b: float = -99999.0,
-    weight_option: str = "min"    
+    weight_option: str = "min",
 ):
     """
     map vector of elevation values into a hypsometric hydraulic radius - depth relationship for one u/v point
@@ -836,32 +1022,32 @@ def subgrid_q_table(
     havg = np.zeros(nlevels)
     nrep = np.zeros(nlevels)
     pwet = np.zeros(nlevels)
-    zz   = np.zeros(nlevels)
+    zz = np.zeros(nlevels)
 
-    n   = int(np.size(elevation)) # Nr of pixels in grid cell
-    n05 = int(n / 2)              # Nr of pixels in half grid cell 
+    n = int(np.size(elevation))  # Nr of pixels in grid cell
+    n05 = int(n / 2)  # Nr of pixels in half grid cell
 
     # Sort elevation and manning values by side A and B
-    dd_a      = elevation[0:n05]
-    dd_b      = elevation[n05:]
+    dd_a = elevation[0:n05]
+    dd_b = elevation[n05:]
     manning_a = manning[0:n05]
     manning_b = manning[n05:]
 
     # Ensure that pixels are at least as high as the minimum elevation in the neighbouring cells
     # This should always be the case, but there may be errors in the interpolation to the subgrid pixels
-    dd_a      = np.maximum(dd_a, z_zmin_a)
-    dd_b      = np.maximum(dd_b, z_zmin_b)
+    dd_a = np.maximum(dd_a, z_zmin_a)
+    dd_b = np.maximum(dd_b, z_zmin_b)
 
     # Determine min and max elevation
-    zmin_a    = np.min(dd_a)
-    zmax_a    = np.max(dd_a)    
-    zmin_b    = np.min(dd_b)
-    zmax_b    = np.max(dd_b)
-    
+    zmin_a = np.min(dd_a)
+    zmax_a = np.max(dd_a)
+    zmin_b = np.min(dd_b)
+    zmax_b = np.max(dd_b)
+
     # Add huthresh to zmin
     zmin = max(zmin_a, zmin_b) + huthresh
     zmax = max(zmax_a, zmax_b)
-    
+
     # Make sure zmax is at least 0.01 m higher than zmin
     zmax = max(zmax, zmin + 0.01)
 
@@ -874,7 +1060,6 @@ def subgrid_q_table(
 
     # Loop through levels
     for ibin in range(nlevels):
-
         # Top of bin
         zbin = zmin + ibin * dlevel
         zz[ibin] = zbin
@@ -882,27 +1067,35 @@ def subgrid_q_table(
         h = np.maximum(zbin - elevation, 0.0)  # water depth in each pixel
 
         # Side A
-        h_a   = np.maximum(zbin - dd_a, 0.0)  # Depth of all pixels (but set min pixel height to zbot). Can be negative, but not zero (because zmin = zbot + huthresh, so there must be pixels below zb).
-        q_a   = h_a**(5.0 / 3.0) / manning_a  # Determine 'flux' for each pixel
-        q_a   = np.mean(q_a)                  # Grid-average flux through all the pixels
-        h_a   = np.mean(h_a)                  # Grid-average depth through all the pixels
-        
+        h_a = np.maximum(
+            zbin - dd_a, 0.0
+        )  # Depth of all pixels (but set min pixel height to zbot). Can be negative, but not zero (because zmin = zbot + huthresh, so there must be pixels below zb).
+        q_a = h_a ** (5.0 / 3.0) / manning_a  # Determine 'flux' for each pixel
+        q_a = np.mean(q_a)  # Grid-average flux through all the pixels
+        h_a = np.mean(h_a)  # Grid-average depth through all the pixels
+
         # Side B
-        h_b   = np.maximum(zbin - dd_b, 0.0)  # Depth of all pixels (but set min pixel height to zbot). Can be negative, but not zero (because zmin = zbot + huthresh, so there must be pixels below zb).
-        q_b   = h_b**(5.0 / 3.0) / manning_b  # Determine 'flux' for each pixel
-        q_b   = np.mean(q_b)                  # Grid-average flux through all the pixels
-        h_b   = np.mean(h_b)                  # Grid-average depth through all the pixels
+        h_b = np.maximum(
+            zbin - dd_b, 0.0
+        )  # Depth of all pixels (but set min pixel height to zbot). Can be negative, but not zero (because zmin = zbot + huthresh, so there must be pixels below zb).
+        q_b = h_b ** (5.0 / 3.0) / manning_b  # Determine 'flux' for each pixel
+        q_b = np.mean(q_b)  # Grid-average flux through all the pixels
+        h_b = np.mean(h_b)  # Grid-average depth through all the pixels
 
         # Compute q and h
-        q_all = np.mean(h**(5.0 / 3.0) / manning)   # Determine grid average 'flux' for each pixel
-        h_all = np.mean(h)                          # grid averaged depth of A and B combined
+        q_all = np.mean(
+            h ** (5.0 / 3.0) / manning
+        )  # Determine grid average 'flux' for each pixel
+        h_all = np.mean(h)  # grid averaged depth of A and B combined
         q_min = np.minimum(q_a, q_b)
         h_min = np.minimum(h_a, h_b)
 
         if option == 1:
-            # Use old 1 option (weighted average of q_ab and q_all) option (min at bottom bin, mean at top bin) 
-            w     = (ibin) / (nlevels - 1)              # Weight (increase from 0 to 1 from bottom to top bin)
-            q     = (1.0 - w) * q_min + w * q_all        # Weighted average of q_min and q_all
+            # Use old 1 option (weighted average of q_ab and q_all) option (min at bottom bin, mean at top bin)
+            w = (ibin) / (
+                nlevels - 1
+            )  # Weight (increase from 0 to 1 from bottom to top bin)
+            q = (1.0 - w) * q_min + w * q_all  # Weighted average of q_min and q_all
             hmean = h_all
             # Wet fraction
             pwet[ibin] = (zbin > elevation + huthresh).sum() / n
@@ -912,11 +1105,11 @@ def subgrid_q_table(
             # This is done by making sure that the wet fraction is 0.0 in the first level on the shallowest side (i.e. if ibin==0, pwet_a or pwet_b must be 0.0).
             # As a result, the weight w will be 0.0 in the first level on the shallowest side.
 
-            pwet_a = (zbin > dd_a).sum() / (n / 2) 
+            pwet_a = (zbin > dd_a).sum() / (n / 2)
             pwet_b = (zbin > dd_b).sum() / (n / 2)
 
             if ibin == 0:
-                # Ensure that at bottom level, either pwet_a or pwet_b is 0.0   
+                # Ensure that at bottom level, either pwet_a or pwet_b is 0.0
                 if pwet_a < pwet_b:
                     pwet_a = 0.0
                 else:
@@ -924,56 +1117,62 @@ def subgrid_q_table(
             elif ibin == nlevels - 1:
                 # Ensure that at top level, both pwet_a and pwet_b are 1.0
                 pwet_a = 1.0
-                pwet_b = 1.0        
+                pwet_b = 1.0
 
             if weight_option == "mean":
                 # Weight increases linearly from 0 to 1 from bottom to top bin use percentage wet in sides A and B
-                w     = 2 * np.minimum(pwet_a, pwet_b) / max(pwet_a + pwet_b, 1.0e-9)
-                q     = (1.0 - w) * q_min + w * q_all        # Weighted average of q_min and q_all
-                hmean = (1.0 - w) * h_min + w * h_all        # Weighted average of h_min and h_all
+                w = 2 * np.minimum(pwet_a, pwet_b) / max(pwet_a + pwet_b, 1.0e-9)
+                q = (1.0 - w) * q_min + w * q_all  # Weighted average of q_min and q_all
+                hmean = (
+                    1.0 - w
+                ) * h_min + w * h_all  # Weighted average of h_min and h_all
 
             else:
                 # Take minimum of q_a and q_b
                 if q_a < q_b:
-                    q     = q_a
+                    q = q_a
                     hmean = h_a
                 else:
-                    q     = q_b
+                    q = q_b
                     hmean = h_b
 
-            pwet[ibin] = 0.5 * (pwet_a + pwet_b)         # Combined pwet_a and pwet_b
+            pwet[ibin] = 0.5 * (pwet_a + pwet_b)  # Combined pwet_a and pwet_b
 
-        havg[ibin] = hmean                          # conveyance depth
-        nrep[ibin] = hmean**(5.0 / 3.0) / q         # Representative n for qmean and hmean
-    
-    nrep_top = nrep[-1]    
+        havg[ibin] = hmean  # conveyance depth
+        nrep[ibin] = hmean ** (5.0 / 3.0) / q  # Representative n for qmean and hmean
+
+    nrep_top = nrep[-1]
     havg_top = havg[-1]
 
     ### Fitting for nrep above zmax
 
     # Determine nfit at zfit
-    zfit  = zmax + zmax - zmin
-    hfit  = havg_top + zmax - zmin                 # mean water depth in cell as computed in SFINCS (assuming linear relation between water level and water depth above zmax)
+    zfit = zmax + zmax - zmin
+    hfit = (
+        havg_top + zmax - zmin
+    )  # mean water depth in cell as computed in SFINCS (assuming linear relation between water level and water depth above zmax)
 
     # Compute q and navg
     if weight_option == "mean":
-        # Use entire uv point 
-        h     = np.maximum(zfit - elevation, 0.0)      # water depth in each pixel
-        q     = np.mean(h**(5.0 / 3.0) / manning)      # combined unit discharge for cell
-        navg  = np.mean(manning)
+        # Use entire uv point
+        h = np.maximum(zfit - elevation, 0.0)  # water depth in each pixel
+        q = np.mean(h ** (5.0 / 3.0) / manning)  # combined unit discharge for cell
+        navg = np.mean(manning)
 
     else:
         # Use minimum of q_a and q_b
         if q_a < q_b:
-            h     = np.maximum(zfit - dd_a, 0.0)         # water depth in each pixel
-            q     = np.mean(h**(5.0 / 3.0) / manning_a)  # combined unit discharge for cell
-            navg  = np.mean(manning_a)
+            h = np.maximum(zfit - dd_a, 0.0)  # water depth in each pixel
+            q = np.mean(
+                h ** (5.0 / 3.0) / manning_a
+            )  # combined unit discharge for cell
+            navg = np.mean(manning_a)
         else:
-            h     = np.maximum(zfit - dd_b, 0.0)
-            q     = np.mean(h**(5.0 / 3.0) / manning_b)
-            navg  = np.mean(manning_b)
+            h = np.maximum(zfit - dd_b, 0.0)
+            q = np.mean(h ** (5.0 / 3.0) / manning_b)
+            navg = np.mean(manning_b)
 
-    nfit = hfit**(5.0 / 3.0) / q
+    nfit = hfit ** (5.0 / 3.0) / q
 
     # Actually apply fit on gn2 (this is what is used in sfincs)
     gnavg2 = 9.81 * navg**2
@@ -995,5 +1194,5 @@ def subgrid_q_table(
                 nfit = nrep_top + 0.1 * (navg - nrep_top)
         gnfit2 = 9.81 * nfit**2
         ffit = (((gnavg2 - gnavg_top2) / (gnavg2 - gnfit2)) - 1) / (zfit - zmax)
-         
-    return zmin, zmax, havg, nrep, pwet, ffit, navg, zz       
+
+    return zmin, zmax, havg, nrep, pwet, ffit, navg, zz

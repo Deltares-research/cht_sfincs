@@ -28,7 +28,7 @@ mmax = int(lx / dx)
 rot = 0.0
 sf.grid.build(x0, y0, nmax, mmax, dx, dy, rot)
 sf.grid.set_uniform_bathymetry(-2.0)
-sf.mask.build(zmin=-99999.0, zmax=99999.0) # Make whole domain active
+sf.mask.build(zmin=-99999.0, zmax=99999.0)  # Make whole domain active
 sf.grid.write()
 
 # Add some thin dams (divide basin into 4 sectors)
@@ -50,9 +50,9 @@ sf.input.variables.obsfile = "sfincs.obs"
 sf.observation_points.write()
 
 # Run for three hours
-sf.input.variables.tref   = datetime.datetime(2020, 1, 1, 0, 0, 0)
+sf.input.variables.tref = datetime.datetime(2020, 1, 1, 0, 0, 0)
 sf.input.variables.tstart = datetime.datetime(2020, 1, 1, 0, 0, 0)
-sf.input.variables.tstop  = datetime.datetime(2020, 1, 1, 3, 0, 0)
+sf.input.variables.tstop = datetime.datetime(2020, 1, 1, 3, 0, 0)
 sf.input.variables.dtmapout = 60.0
 sf.input.variables.dthisout = 60.0
 sf.input.variables.advection = 0

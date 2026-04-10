@@ -1,24 +1,44 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Apr 21 16:25:23 2022
+"""SFINCS subgrid table builder (version 2).
 
-@author: ormondt
+Updated implementation of the SfincsSubgridTable class that uses the
+build_subgrid_table_quadtree function from the quadtree builder module.
 """
+
 import os
+
 import xarray as xr
 
 from cht_sfincs.subgrid_quadtree_builder import build_subgrid_table_quadtree
 
 
 class SfincsSubgridTable:
+    """SFINCS subgrid look-up table (version 2).
 
-    def __init__(self, model, version=0):
+    Updated implementation using build_subgrid_table_quadtree. Stores the
+    subgrid conveyance and volume tables for EACH cell and u/v point in the
+    quadtree mesh, regardless of mask value.
+
+    Parameters
+    ----------
+    model : SFINCS
+        The parent SFINCS model instance.
+    version : int, optional
+        Table format version number. Defaults to ``0``.
+    """
+
+    def __init__(self, model: "SFINCS", version: int = 0) -> None:
         # A subgrid table contains data for EACH cell, u and v point in the quadtree mesh,
         # regardless of the mask value!
         self.model = model
         self.version = version
 
-    def read(self):
+    def read(self) -> None:
+        """Read the subgrid table from a NetCDF file.
+
+        Returns
+        -------
+        None
+        """
 
         # Check if file exists
         if not self.model.input.variables.sbgfile:
@@ -26,13 +46,24 @@ class SfincsSubgridTable:
 
         file_name = os.path.join(self.model.path, self.model.input.variables.sbgfile)
         if not os.path.isfile(file_name):
-            print("File " + file_name + " does not exist!")
+            print(f"File {file_name} does not exist!")
             return
 
         # Read from netcdf file with xarray
         self.ds = xr.load_dataset(file_name)
 
-    def write(self, file_name=None):
+    def write(self, file_name: str | None = None) -> None:
+        """Write the subgrid table to a NetCDF file.
+
+        Parameters
+        ----------
+        file_name : str, optional
+            Override output path. Defaults to ``<model.path>/<sbgfile>``.
+
+        Returns
+        -------
+        None
+        """
         if not file_name:
             if not self.model.input.variables.sbgfile:
                 return

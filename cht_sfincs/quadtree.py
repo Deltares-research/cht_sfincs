@@ -1,45 +1,72 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Apr 21 17:24:49 2022
+"""SFINCS quadtree grid class and related utilities.
 
-@author: ormondt
+Provides the SfincsGrid class for building, reading, writing, and visualising
+the SFINCS quadtree mesh stored in the sfincs.nc (qtrfile) format.
 """
+
 import os
-import numpy as np
-from pyproj import CRS, Transformer
-import shapely
-import rasterio
-from rasterio.transform import from_origin
-from rasterio.enums import Resampling
-from rasterio.windows import Window
-import xugrid as xu
-import xarray as xr
 import warnings
-import geopandas as gpd
-np.warnings = warnings
 
-import pandas as pd
+import geopandas as gpd
+import numpy as np
+import rasterio
+import shapely
+import xarray as xr
+import xugrid as xu
+from pyproj import CRS, Transformer
+from rasterio.enums import Resampling
+from rasterio.transform import from_origin
+from rasterio.windows import Window
+
+np.warnings = warnings
 
 import datashader as ds
 import datashader.transfer_functions as tf
+import pandas as pd
+from cht_utils.interpolation import interp2
 from datashader.utils import export_image
 
-from cht_utils.interpolation import interp2
 from .quadtree_builder import build_quadtree_xugrid, cut_inactive_cells
 
+
 class SfincsGrid:
-    def __init__(self, model):
+    """SFINCS quadtree (and regular) grid container.
+
+    Stores the xugrid Dataset for the SFINCS computational mesh and provides
+    methods for building, reading, writing, and visualising the grid.
+
+    Parameters
+    ----------
+    model : SFINCS
+        The parent SFINCS model instance.
+    """
+
+    def __init__(self, model: "SFINCS") -> None:
         self.model = model
         self.data = None
         self.type = "regular"
         self.exterior = gpd.GeoDataFrame()
         self.datashader_dataframe = pd.DataFrame()
 
-    def read(self, file_name=None):
+    def read(self, file_name: str | None = None) -> None:
+        """Read the quadtree grid netcdf file.
+
+        Parameters
+        ----------
+        file_name : str, optional
+            Path to the qtr netcdf file.  Defaults to
+            ``<model.path>/<qtrfile>``.
+
+        Returns
+        -------
+        None
+        """
         if file_name is None:
-            if not self.model.input.variables.qtrfile: 
+            if not self.model.input.variables.qtrfile:
                 self.model.input.variables.qtrfile = "sfincs.nc"
-            file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
+            file_name = os.path.join(
+                self.model.path, self.model.input.variables.qtrfile
+            )
         self.data = xu.load_dataset(file_name)
 
         self.type = "quadtree"
@@ -57,11 +84,27 @@ class SfincsGrid:
         self.data["crs"] = self.model.crs.to_epsg()
         self.data["crs"].attrs = self.model.crs.to_cf()
 
-    def write(self, file_name=None, version=0):
+    def write(self, file_name: str | None = None, version: int = 0) -> None:
+        """Write the quadtree grid to a netcdf file.
+
+        Parameters
+        ----------
+        file_name : str, optional
+            Path for the output file.  Defaults to
+            ``<model.path>/<qtrfile>``.
+        version : int, optional
+            File format version (reserved).  Defaults to ``0``.
+
+        Returns
+        -------
+        None
+        """
         if file_name is None:
-            if not self.model.input.variables.qtrfile: 
+            if not self.model.input.variables.qtrfile:
                 self.model.input.variables.qtrfile = "sfincs.nc"
-            file_name = os.path.join(self.model.path, self.model.input.variables.qtrfile)
+            file_name = os.path.join(
+                self.model.path, self.model.input.variables.qtrfile
+            )
 
         ds = self.data.ugrid.to_dataset()
         ds.attrs = self.data.attrs
@@ -73,18 +116,48 @@ class SfincsGrid:
         if os.path.exists(snapwave_file):
             os.remove(snapwave_file)
 
-    def build(self,
-              x0,
-              y0,
-              nmax,
-              mmax,
-              dx,
-              dy,
-              rotation,
-              refinement_polygons=None,
-              bathymetry_sets=None,
-              bathymetry_database=None):
+    def build(
+        self,
+        x0: float,
+        y0: float,
+        nmax: int,
+        mmax: int,
+        dx: float,
+        dy: float,
+        rotation: float,
+        refinement_polygons=None,
+        bathymetry_sets=None,
+        bathymetry_database=None,
+    ) -> None:
+        """Build the quadtree grid from scratch.
 
+        Parameters
+        ----------
+        x0 : float
+            X-coordinate of the grid origin.
+        y0 : float
+            Y-coordinate of the grid origin.
+        nmax : int
+            Number of cells in the y-direction at the coarsest level.
+        mmax : int
+            Number of cells in the x-direction at the coarsest level.
+        dx : float
+            Grid spacing in x at the coarsest level.
+        dy : float
+            Grid spacing in y at the coarsest level.
+        rotation : float
+            Grid rotation angle (degrees counter-clockwise).
+        refinement_polygons : geopandas.GeoDataFrame, optional
+            Polygons that trigger local grid refinement.
+        bathymetry_sets : list, optional
+            Bathymetry datasets passed to :func:`build_quadtree_xugrid`.
+        bathymetry_database : object, optional
+            Bathymetry database object used to fetch depth data.
+
+        Returns
+        -------
+        None
+        """
         print("Building mesh ...")
 
         # Always quadtree !
@@ -95,15 +168,28 @@ class SfincsGrid:
         self.model.mask.clear_datashader_dataframe()
 
         self.data = build_quadtree_xugrid(
-            x0, y0, nmax, mmax, dx, dy, rotation, self.model.crs,
+            x0,
+            y0,
+            nmax,
+            mmax,
+            dx,
+            dy,
+            rotation,
+            self.model.crs,
             refinement_polygons=refinement_polygons,
             bathymetry_sets=bathymetry_sets,
-            bathymetry_database=bathymetry_database
+            bathymetry_database=bathymetry_database,
         )
-        
+
         self.get_exterior()
 
-    def cut_inactive_cells(self):
+    def cut_inactive_cells(self) -> None:
+        """Remove inactive cells (mask == 0) from the grid data.
+
+        Returns
+        -------
+        None
+        """
         # Clear datashader dataframes (new ones will be created when needed by map_overlay methods)
         self.clear_datashader_dataframe()
         self.model.mask.clear_datashader_dataframe()
@@ -111,28 +197,89 @@ class SfincsGrid:
         self.data = cut_inactive_cells(self.data)
         self.get_exterior()
 
-    def interpolate_bathymetry(self, x, y, z, method="linear"):
-        """x, y, and z are numpy arrays with coordinates and bathymetry values"""
+    def interpolate_bathymetry(
+        self,
+        x: "np.ndarray",
+        y: "np.ndarray",
+        z: "np.ndarray",
+        method: str = "linear",
+    ) -> None:
+        """Interpolate scattered bathymetry data onto the grid cell centres.
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            X-coordinates of the source bathymetry points.
+        y : numpy.ndarray
+            Y-coordinates of the source bathymetry points.
+        z : numpy.ndarray
+            Bathymetry values at each (x, y) point.
+        method : str, optional
+            Interpolation method. Defaults to ``"linear"``.
+
+        Returns
+        -------
+        None
+        """
         xy = self.data.grid.face_coordinates
         # zz = np.full(self.nr_cells, np.nan)
         xz = xy[:, 0]
         yz = xy[:, 1]
         zz = interp2(x, y, z, xz, yz, method=method)
         ugrid2d = self.data.grid
-        self.data["z"] = xu.UgridDataArray(xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["z"] = xu.UgridDataArray(
+            xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d
+        )
 
-    def set_uniform_bathymetry(self, zb):
+    def set_uniform_bathymetry(self, zb: float) -> None:
+        """Set a spatially uniform bed level across the entire grid.
+
+        Parameters
+        ----------
+        zb : float
+            Bed level (m) to assign to all cells.
+
+        Returns
+        -------
+        None
+        """
         self.data["z"][:] = zb
 
-    def set_bathymetry(self,
-                       bathymetry_sets,
-                       bathymetry_database=None,
-                       zmin=-1.0e9,
-                       zmax=1.0e9,
-                       chunk_size=2000,
-                       zfill=None,
-                       quiet=True):
-        
+    def set_bathymetry(
+        self,
+        bathymetry_sets: list,
+        bathymetry_database=None,
+        zmin: float = -1.0e9,
+        zmax: float = 1.0e9,
+        chunk_size: int = 2000,
+        zfill: float | None = None,
+        quiet: bool = True,
+    ) -> None:
+        """Set grid bed levels from the bathymetry database.
+
+        Parameters
+        ----------
+        bathymetry_sets : list
+            Bathymetry dataset configuration list.
+        bathymetry_database : object, optional
+            Bathymetry database object.  Required.
+        zmin : float, optional
+            Minimum allowed bed level (m). Defaults to ``-1.0e9``.
+        zmax : float, optional
+            Maximum allowed bed level (m). Defaults to ``1.0e9``.
+        chunk_size : int, optional
+            Number of cells per chunk in one direction when processing large
+            domains.  Defaults to ``2000``.
+        zfill : float, optional
+            Fill value for cells with no bathymetry data.  ``None`` leaves
+            NaN.  Defaults to ``None``.
+        quiet : bool, optional
+            Suppress progress messages.  Defaults to ``True``.
+
+        Returns
+        -------
+        None
+        """
         if bathymetry_database is None:
             print("Error! No bathymetry database provided!")
             return
@@ -155,7 +302,7 @@ class SfincsGrid:
         # This is also done when the grid is built, but that information is not stored
         ifirst = np.zeros(nlev, dtype=int)
         ilast = np.zeros(nlev, dtype=int)
-        level = self.data["level"].values[:] - 1 # 0-based
+        level = self.data["level"].values[:] - 1  # 0-based
         for ilev in range(0, nlev):
             # Find index of first cell with this level
             ifirst[ilev] = np.where(level == ilev)[0][0]
@@ -167,21 +314,26 @@ class SfincsGrid:
 
         # Loop through all levels
         for ilev in range(nlev):
-
             if not quiet:
-                print("Processing bathymetry level " + str(ilev + 1) + " of " + str(nlev) + " ...")
+                print(
+                    "Processing bathymetry level "
+                    + str(ilev + 1)
+                    + " of "
+                    + str(nlev)
+                    + " ..."
+                )
 
-            # First and last cell indices in this level            
+            # First and last cell indices in this level
             i0 = ifirst[ilev]
             i1 = ilast[ilev]
-            
+
             # Make blocks of cells in this level only
             cell_indices_in_level = np.arange(i0, i1 + 1, dtype=int)
-                  
-            xz  = xy[cell_indices_in_level, 0]
-            yz  = xy[cell_indices_in_level, 1]
-            dxlev = dx / 2**ilev # cell size in this level (m or degrees if geographic)
-            # dxmin is cell size in meters 
+
+            xz = xy[cell_indices_in_level, 0]
+            yz = xy[cell_indices_in_level, 1]
+            dxlev = dx / 2**ilev  # cell size in this level (m or degrees if geographic)
+            # dxmin is cell size in meters
             if self.model.crs.is_geographic:
                 dxmin = dxlev * 111000.0
             else:
@@ -191,7 +343,7 @@ class SfincsGrid:
             # We first determine the bounding box of all cells in this level.
             # If if is expected that the total number of cells that will be loaded
             # from the bathymetry database in x or y direction exceeds chunk_size,
-            # we do it in chunks. It would be better to do all of this 
+            # we do it in chunks. It would be better to do all of this
             # in cht_bathymetry!
 
             # Boundaries of all cells in this level
@@ -204,8 +356,7 @@ class SfincsGrid:
             y_chunks = np.arange(y_min, y_max, chunk_size * dxlev)
 
             if np.size(x_chunks) > 1 or np.size(y_chunks) > 1:
-
-                # Looks like we need to do it in chunks. 
+                # Looks like we need to do it in chunks.
 
                 if not quiet:
                     print(f"Processing in {len(x_chunks)} x {len(y_chunks)} chunks ...")
@@ -215,7 +366,9 @@ class SfincsGrid:
                 for ix in range(len(x_chunks)):
                     for iy in range(len(y_chunks)):
                         if not quiet:
-                            print(f"Processing chunk {ix+1}, {iy+1} of {len(x_chunks)}, {len(y_chunks)} ...")
+                            print(
+                                f"Processing chunk {ix + 1}, {iy + 1} of {len(x_chunks)}, {len(y_chunks)} ..."
+                            )
 
                         # Find points xz and yz in this chunk
 
@@ -233,33 +386,32 @@ class SfincsGrid:
                             y_min_chunk = y_chunks[iy]
                             y_max_chunk = y_max
 
-                        in_chunk = np.where((xz >= x_min_chunk) & (xz < x_max_chunk) &
-                                            (yz >= y_min_chunk) & (yz < y_max_chunk))[0]
+                        in_chunk = np.where(
+                            (xz >= x_min_chunk)
+                            & (xz < x_max_chunk)
+                            & (yz >= y_min_chunk)
+                            & (yz < y_max_chunk)
+                        )[0]
 
                         if len(in_chunk) > 0:
-
                             xzc = xz[in_chunk]
                             yzc = yz[in_chunk]
-                            zgc = bathymetry_database.get_bathymetry_on_points(xzc,
-                                                                               yzc,
-                                                                               dxmin,
-                                                                               self.model.crs,
-                                                                               bathymetry_sets)
+                            zgc = bathymetry_database.get_bathymetry_on_points(
+                                xzc, yzc, dxmin, self.model.crs, bathymetry_sets
+                            )
                             zgl[in_chunk] = zgc
 
-            else:                
+            else:
                 # No need for chuncking. Do it in one go.
-                zgl = bathymetry_database.get_bathymetry_on_points(xz,
-                                                                   yz,
-                                                                   dxmin,
-                                                                   self.model.crs,
-                                                                   bathymetry_sets)
+                zgl = bathymetry_database.get_bathymetry_on_points(
+                    xz, yz, dxmin, self.model.crs, bathymetry_sets
+                )
 
             # Limit zgl to zmin and zmax
             zgl = np.maximum(zgl, zmin)
             zgl = np.minimum(zgl, zmax)
             zz[cell_indices_in_level] = zgl
-            
+
             # Limit zgl to zmin and zmax
             zgl = np.maximum(zgl, zmin)
             zgl = np.minimum(zgl, zmax)
@@ -268,12 +420,26 @@ class SfincsGrid:
 
         if zfill is not None:
             # Fill any remaining NaN values with zfill
-            zz[np.isnan(zz)] = zfill 
+            zz[np.isnan(zz)] = zfill
 
         ugrid2d = self.data.grid
-        self.data["z"] = xu.UgridDataArray(xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d)
+        self.data["z"] = xu.UgridDataArray(
+            xr.DataArray(data=zz, dims=[ugrid2d.face_dimension]), ugrid2d
+        )
 
-    def snap_to_grid(self, polyline):
+    def snap_to_grid(self, polyline: "gpd.GeoDataFrame") -> "gpd.GeoDataFrame":
+        """Snap polyline geometries to the nearest cell edges.
+
+        Parameters
+        ----------
+        polyline : geopandas.GeoDataFrame
+            GeoDataFrame containing LineString geometries to snap.
+
+        Returns
+        -------
+        geopandas.GeoDataFrame
+            Snapped GeoDataFrame, or empty GeoDataFrame if input is empty.
+        """
         if len(polyline) == 0:
             return gpd.GeoDataFrame()
         # If geographic coordinates, set max_snap_distance to 0.1 degrees
@@ -285,38 +451,73 @@ class SfincsGrid:
         geom_list = []
         for iline, line in polyline.iterrows():
             geom = line["geometry"]
-            if geom.geom_type == 'LineString':
+            if geom.geom_type == "LineString":
                 geom_list.append(geom)
-        gdf = gpd.GeoDataFrame({'geometry': geom_list})    
+        gdf = gpd.GeoDataFrame({"geometry": geom_list})
         print("Snapping to grid ...")
-        snapped_uds, snapped_gdf = xu.snap_to_grid(gdf, self.data.grid, max_snap_distance=max_snap_distance)
+        snapped_uds, snapped_gdf = xu.snap_to_grid(
+            gdf, self.data.grid, max_snap_distance=max_snap_distance
+        )
         print("Snapping to grid done.")
         snapped_gdf = snapped_gdf.set_crs(self.model.crs)
         return snapped_gdf
 
-    def face_coordinates(self):
+    def face_coordinates(self) -> tuple:
+        """Return the x and y coordinates of all cell face centres.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            ``(x, y)`` arrays of cell face centre coordinates.
+        """
         # if self.data is None:
         #     return None, None
         xy = self.data.grid.face_coordinates
-        return xy[:, 0], xy[:,1]
+        return xy[:, 0], xy[:, 1]
 
-    def get_exterior(self):
+    def get_exterior(self) -> None:
+        """Compute and store the exterior boundary polygon(s) of the grid.
+
+        Returns
+        -------
+        None
+        """
         try:
-            indx = self.data.grid.edge_node_connectivity[self.data.grid.exterior_edges, :]
+            indx = self.data.grid.edge_node_connectivity[
+                self.data.grid.exterior_edges, :
+            ]
             x = self.data.grid.node_x[indx]
             y = self.data.grid.node_y[indx]
             # Make linestrings from numpy arrays x and y
-            linestrings = [shapely.LineString(np.column_stack((x[i], y[i]))) for i in range(len(x))]
+            linestrings = [
+                shapely.LineString(np.column_stack((x[i], y[i]))) for i in range(len(x))
+            ]
             # Merge linestrings
             merged = shapely.ops.linemerge(linestrings)
             # Merge polygons
             polygons = shapely.ops.polygonize(merged)
-            self.exterior = gpd.GeoDataFrame(geometry=list(polygons), crs=self.model.crs)
-        except:
-            self.exterior = gpd.GeoDataFrame()    
+            self.exterior = gpd.GeoDataFrame(
+                geometry=list(polygons), crs=self.model.crs
+            )
+        except Exception:
+            self.exterior = gpd.GeoDataFrame()
 
-    def bounds(self, crs=None, buffer=0.0):
-        """Returns list with bounds (lon1, lat1, lon2, lat2), with buffer (default 0.0) and in any CRS (default : same CRS as model)"""
+    def bounds(self, crs=None, buffer: float = 0.0) -> list:
+        """Return the bounding box of the grid exterior.
+
+        Parameters
+        ----------
+        crs : pyproj.CRS, optional
+            Target CRS for the bounds.  Defaults to the model CRS.
+        buffer : float, optional
+            Fractional buffer to add around the bounding box.
+            Defaults to ``0.0``.
+
+        Returns
+        -------
+        list[float]
+            ``[lon_min, lat_min, lon_max, lat_max]`` in the requested CRS.
+        """
         if crs is None:
             crs = self.model.crs
         # Convert exterior gdf to WGS 84
@@ -329,7 +530,35 @@ class SfincsGrid:
         lst[3] = lst[3] + buffer * dy
         return lst
 
-    def map_overlay(self, file_name, xlim=None, ylim=None, color="black", width=800):
+    def map_overlay(
+        self,
+        file_name: str,
+        xlim=None,
+        ylim=None,
+        color: str = "black",
+        width: int = 800,
+    ) -> bool:
+        """Render the grid edges as a map overlay image using Datashader.
+
+        Parameters
+        ----------
+        file_name : str
+            Output image file path (without extension).
+        xlim : list[float], optional
+            Longitude extent ``[lon_min, lon_max]`` in geographic CRS.
+        ylim : list[float], optional
+            Latitude extent ``[lat_min, lat_max]`` in geographic CRS.
+        color : str, optional
+            Colour for grid edges. Defaults to ``"black"``.
+        width : int, optional
+            Output image width in pixels. Defaults to ``800``.
+
+        Returns
+        -------
+        bool
+            ``True`` on success, ``False`` if the grid is empty or rendering
+            fails.
+        """
 
         if self.data is None:
             # No grid (yet)
@@ -340,9 +569,7 @@ class SfincsGrid:
             if self.datashader_dataframe.empty:
                 self.get_datashader_dataframe()
 
-            transformer = Transformer.from_crs(4326,
-                                        3857,
-                                        always_xy=True)
+            transformer = Transformer.from_crs(4326, 3857, always_xy=True)
             xl0, yl0 = transformer.transform(xlim[0], ylim[0])
             xl1, yl1 = transformer.transform(xlim[1], ylim[1])
             if xl0 > xl1:
@@ -351,11 +578,12 @@ class SfincsGrid:
             ylim = [yl0, yl1]
             ratio = (ylim[1] - ylim[0]) / (xlim[1] - xlim[0])
             height = int(width * ratio)
-            cvs = ds.Canvas(x_range=xlim, y_range=ylim, plot_height=height, plot_width=width)
-            agg = cvs.line(self.datashader_dataframe,
-                           x=['x1', 'x2'],
-                           y=['y1', 'y2'],
-                           axis=1)
+            cvs = ds.Canvas(
+                x_range=xlim, y_range=ylim, plot_height=height, plot_width=width
+            )
+            agg = cvs.line(
+                self.datashader_dataframe, x=["x1", "x2"], y=["y1", "y2"], axis=1
+            )
             img = tf.shade(agg)
             path = os.path.dirname(file_name)
             if not path:
@@ -364,24 +592,27 @@ class SfincsGrid:
             name = os.path.splitext(name)[0]
             export_image(img, name, export_path=path)
             return True
-        except Exception as e:
+        except Exception:
             return False
 
-    def get_datashader_dataframe(self):
-        """Creates a dataframe with line elements for datashader"""
+    def get_datashader_dataframe(self) -> None:
+        """Populate the internal Datashader DataFrame with grid edge line segments.
+
+        Returns
+        -------
+        None
+        """
         # Create a dataframe with line elements
-        x1 = self.data.grid.edge_node_coordinates[:,0,0]
-        x2 = self.data.grid.edge_node_coordinates[:,1,0]
-        y1 = self.data.grid.edge_node_coordinates[:,0,1]
-        y2 = self.data.grid.edge_node_coordinates[:,1,1]
+        x1 = self.data.grid.edge_node_coordinates[:, 0, 0]
+        x2 = self.data.grid.edge_node_coordinates[:, 1, 0]
+        y1 = self.data.grid.edge_node_coordinates[:, 0, 1]
+        y2 = self.data.grid.edge_node_coordinates[:, 1, 1]
         # Check if grid crosses the dateline
         cross_dateline = False
         if self.model.crs.is_geographic:
             if np.max(x1) > 180.0 or np.max(x2) > 180.0:
                 cross_dateline = True
-        transformer = Transformer.from_crs(self.model.crs,
-                                            3857,
-                                            always_xy=True)
+        transformer = Transformer.from_crs(self.model.crs, 3857, always_xy=True)
         x1, y1 = transformer.transform(x1, y1)
         x2, y2 = transformer.transform(x2, y2)
         if cross_dateline:
@@ -389,11 +620,31 @@ class SfincsGrid:
             x2[x2 < 0] += 40075016.68557849
         self.datashader_dataframe = pd.DataFrame(dict(x1=x1, y1=y1, x2=x2, y2=y2))
 
-    def clear_datashader_dataframe(self):
-        """Clears the datashader dataframe"""
-        self.datashader_dataframe = pd.DataFrame() 
+    def clear_datashader_dataframe(self) -> None:
+        """Clear the internal Datashader DataFrame.
 
-    def get_indices_at_points(self, x, y):
+        Returns
+        -------
+        None
+        """
+        self.datashader_dataframe = pd.DataFrame()
+
+    def get_indices_at_points(self, x: "np.ndarray", y: "np.ndarray") -> "np.ndarray":
+        """Find the grid cell indices for a set of (x, y) query points.
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            X-coordinates of the query points (scalar or 2-D array).
+        y : numpy.ndarray
+            Y-coordinates of the query points (same shape as *x*).
+
+        Returns
+        -------
+        numpy.ndarray
+            Zero-based cell index array with the same shape as *x*; ``-1``
+            where no cell is found.
+        """
 
         # x and y are 2D arrays of coordinates (x, y) in the same projection as the model
         # if x is a float, convert to 2D array
@@ -427,10 +678,12 @@ class SfincsGrid:
             ifirst = np.zeros(nr_refinement_levels, dtype=int)
             for ilev in range(0, nr_refinement_levels):
                 # Find index of first cell with this level
-                ifirst[ilev] = np.where(self.data["level"].to_numpy()[:] == ilev + 1)[0][0]
+                ifirst[ilev] = np.where(self.data["level"].to_numpy()[:] == ilev + 1)[
+                    0
+                ][0]
             self.ifirst = ifirst
 
-        ifirst = self.ifirst    
+        ifirst = self.ifirst
 
         i0_lev = []
         i1_lev = []
@@ -439,7 +692,6 @@ class SfincsGrid:
         nm_lev = []
 
         for level in range(nr_refinement_levels):
-
             i0 = ifirst[level]
             if level < nr_refinement_levels - 1:
                 i1 = ifirst[level + 1]
@@ -493,13 +745,33 @@ class SfincsGrid:
 
         return indx
 
-    def make_topobathy_cog(self,
-                           filename,
-                           bathymetry_sets,
-                           bathymetry_database=None,
-                           dx=10.0):
-        
-        """Make a COG file with topobathy. Now only works for projected coordinates. This always make the topobathy COG in the same projection as the model."""
+    def make_topobathy_cog(
+        self,
+        filename: str,
+        bathymetry_sets: list,
+        bathymetry_database=None,
+        dx: float = 10.0,
+    ) -> None:
+        """Write a Cloud-Optimised GeoTIFF (COG) of the grid topobathymetry.
+
+        Currently only works for projected (non-geographic) coordinates.
+        The output COG is in the same CRS as the model.
+
+        Parameters
+        ----------
+        filename : str
+            Output COG file path.
+        bathymetry_sets : list
+            Bathymetry dataset configuration list.
+        bathymetry_database : object, optional
+            Bathymetry database object.
+        dx : float, optional
+            Output raster resolution (m). Defaults to ``10.0``.
+
+        Returns
+        -------
+        None
+        """
 
         # Get the bounds of the grid
         bounds = self.bounds()
@@ -517,14 +789,18 @@ class SfincsGrid:
 
         xx = np.arange(x0, x1, dx) + 0.5 * dx
         yy = np.arange(y1, y0, -dx) - 0.5 * dx
-        zz = np.empty((len(yy), len(xx),), dtype=np.float32)
+        zz = np.empty(
+            (
+                len(yy),
+                len(xx),
+            ),
+            dtype=np.float32,
+        )
 
         xx, yy = np.meshgrid(xx, yy)
-        zz = bathymetry_database.get_bathymetry_on_points(xx,
-                                                          yy,
-                                                          dx,
-                                                          self.model.crs,
-                                                          bathymetry_sets)
+        zz = bathymetry_database.get_bathymetry_on_points(
+            xx, yy, dx, self.model.crs, bathymetry_sets
+        )
 
         # And now to cog (use -999 as the nodata value)
         with rasterio.open(
@@ -541,9 +817,21 @@ class SfincsGrid:
         ) as dst:
             dst.write(zz, 1)
 
-    def make_index_cog(self, filename, filename_topobathy):
-    # def make_index_cog(self, filename, dx=10.0):
-        """Make a COG file with indices of the quadtree grid cells."""
+    def make_index_cog(self, filename: str, filename_topobathy: str) -> None:
+        """Write a Cloud-Optimised GeoTIFF (COG) mapping pixels to cell indices.
+
+        Parameters
+        ----------
+        filename : str
+            Output COG file path for the cell-index raster.
+        filename_topobathy : str
+            Path to an existing topobathy COG whose extent and resolution
+            define the output raster.
+
+        Returns
+        -------
+        None
+        """
 
         # Read coordinates from topobathy file
         with rasterio.open(filename_topobathy) as src:
@@ -594,7 +882,13 @@ class SfincsGrid:
 
         xx = np.arange(x0, x1, dx) + 0.5 * dx
         yy = np.arange(y1, y0, -dx) - 0.5 * dx
-        ii = np.empty((len(yy), len(xx),), dtype=np.uint32)
+        ii = np.empty(
+            (
+                len(yy),
+                len(xx),
+            ),
+            dtype=np.uint32,
+        )
 
         # # Create empty ds
         # ds = xr.Dataset(
@@ -615,7 +909,7 @@ class SfincsGrid:
         indices[np.where(indices == -999)] = nodata
 
         # Fill the array with indices
-        ii[:, :] = indices        
+        ii[:, :] = indices
 
         # # Write first to netcdf
         # ds.to_netcdf("index.nc")
@@ -636,11 +930,30 @@ class SfincsGrid:
         ) as dst:
             dst.write(ii, 1)
 
+    def make_index_cog_chunked(
+        self,
+        filename: str,
+        filename_topobathy: str,
+        blocksize: int = 1024,
+    ) -> None:
+        """Write a chunked Cloud-Optimised GeoTIFF mapping pixels to cell indices.
 
-    def make_index_cog_chunked(self, filename, filename_topobathy, blocksize=1024):
-        """
-        Make a COG file with indices of the quadtree grid cells,
-        processing in chunks so it works for very large rasters.
+        Like :meth:`make_index_cog` but processes the raster in blocks so
+        it works for very large domains.
+
+        Parameters
+        ----------
+        filename : str
+            Output COG file path for the cell-index raster.
+        filename_topobathy : str
+            Path to an existing topobathy COG whose extent and resolution
+            define the output raster.
+        blocksize : int, optional
+            Tile/block size in pixels. Defaults to ``1024``.
+
+        Returns
+        -------
+        None
         """
 
         # Read metadata from topobathy file
@@ -670,11 +983,9 @@ class SfincsGrid:
         }
 
         with rasterio.open(filename, "w", **profile) as dst:
-
             # Process block by block
             for row_off in range(0, height, blocksize):
                 for col_off in range(0, width, blocksize):
-
                     win_width = min(blocksize, width - col_off)
                     win_height = min(blocksize, height - row_off)
                     window = Window(col_off, row_off, win_width, win_height)
@@ -698,6 +1009,7 @@ class SfincsGrid:
 
                     # Write chunk into output
                     dst.write(indices, 1, window=window)
+
 
 def binary_search(val_array, vals):
     indx = np.searchsorted(val_array, vals)  # ind is size of vals

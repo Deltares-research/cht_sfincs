@@ -1,70 +1,73 @@
-# -*- coding: utf-8 -*-
+"""SnapWave quadtree grid utilities.
+
+Helper routines for creating and manipulating the SnapWave wave-model grid
+that is coupled to the SFINCS quadtree mesh.
 """
-Created on Thu Apr 21 17:24:49 2022
-
-@author: ormondt
-"""
-import time
-import os
-import numpy as np
-from matplotlib import path
-
-# import matplotlib.pyplot as plt
-from pyproj import CRS, Transformer
-import shapely
-
-import xugrid as xu
-import xarray as xr
 
 # from .to_xugrid import xug
 import warnings
 
+import numpy as np
+import xarray as xr
+
+# import matplotlib.pyplot as plt
+import xugrid as xu
+from matplotlib import path
+
 np.warnings = warnings
 
-import geopandas as gpd
-import pandas as pd
 
-import datashader as ds
-import datashader.transfer_functions as tf
-from datashader.utils import export_image
+def snapwave_quadtree2mesh(qtr, file_name: str | None = None):
+    """Convert a SFINCS quadtree dataset to a SnapWave mesh.
 
-from cht_utils.interpolation import interp2
+    Builds the unstructured SnapWave mesh by iterating over active SnapWave
+    cells (``snapwave_mask == 1``) in the SFINCS quadtree and assembling the
+    face-node connectivity.
 
+    Parameters
+    ----------
+    qtr : SfincsGrid
+        SFINCS quadtree grid object whose ``data`` attribute contains the
+        ``snapwave_mask``, ``n``, ``m``, neighbour arrays, etc.
+    file_name : str, optional
+        If provided, write the mesh to this file (currently unused).
 
-def snapwave_quadtree2mesh(qtr, file_name=None):
+    Returns
+    -------
+    None
+    """
     # Steps:
     #
     # 4) Loop through all points and make cells for points where msk==1.
-    #    The node indices in the cells will point to the indices of the entire 
+    #    The node indices in the cells will point to the indices of the entire
     #    In a second temporary mask array mask2, determine which nodes are actually active (being part a cell)
     # 5) Count actual number of active nodes and cells, and allocate arrays
     # 6) Set node data and re-map indices
     #
     # STEP 1 - Read quadtree file
     #
-    nr_cells = len(nr_cells = len(qtr.data.mesh2d_nFaces))
+    nr_cells = len(nr_cells=len(qtr.data.mesh2d_nFaces))
 
     mask2 = np.zeros(nr_cells, dtype=int) + 1
 
-    ns     = qtr.data["n"].values[:]
-    ms     = qtr.data["m"].values[:]
-    nus    = qtr.data["nu"].values[:]
-    nu1s   = qtr.data["nu1"].values[:]
-    nu2s   = qtr.data["nu2"].values[:]
-    mus    = qtr.data["mu"].values[:]
-    mu1s   = qtr.data["mu1"].values[:]
-    mu2s   = qtr.data["mu2"].values[:]
-    mask   = qtr.data["snapwave_mask"].values[:]
-    level  = qtr.data["level"].values[:]
+    ns = qtr.data["n"].values[:]
+    ms = qtr.data["m"].values[:]
+    nus = qtr.data["nu"].values[:]
+    nu1s = qtr.data["nu1"].values[:]
+    nu2s = qtr.data["nu2"].values[:]
+    mus = qtr.data["mu"].values[:]
+    mu1s = qtr.data["mu1"].values[:]
+    mu2s = qtr.data["mu2"].values[:]
+    mask = qtr.data["snapwave_mask"].values[:]
+    level = qtr.data["level"].values[:]
 
     x0, y0 = qtr.face_coordinates()
-    z0     = qtr.data["z"].values[:]
+    z0 = qtr.data["z"].values[:]
 
     # STEP 4 - Make faces
     faces = np.zeros((4, 4 * nr_cells), dtype=int) - 1
     nfaces = -1
     for ip in range(nr_cells):
-
         if mask[ip] == 0:
             continue
 
@@ -77,7 +80,7 @@ def snapwave_quadtree2mesh(qtr, file_name=None):
         mu1 = mu1s[ip]
         mu2 = mu2s[ip]
 
-        # Using 0-based indexing here, so different than in Fortran 
+        # Using 0-based indexing here, so different than in Fortran
         if odd(n):
             n_odd = False
         else:
@@ -702,9 +705,9 @@ def snapwave_quadtree2mesh(qtr, file_name=None):
     for iface in range(no_faces):
         for j in range(4):
             if faces[j, iface] > -1:
-                ip0 = faces[j, iface]                  # index in full quadtree
+                ip0 = faces[j, iface]  # index in full quadtree
                 ip1 = index_snapwave_in_quadtree[ip0]  # index in reduced quadtree
-                face_nodes[j, iface] = ip1             # set index to that of reduced mesh
+                face_nodes[j, iface] = ip1  # set index to that of reduced mesh
 
     nodes = np.transpose(np.vstack((x, y)))
     faces = np.transpose(face_nodes)
@@ -712,7 +715,7 @@ def snapwave_quadtree2mesh(qtr, file_name=None):
 
     xugrid = xu.Ugrid2d(nodes[:, 0], nodes[:, 1], fill_value, faces)
 
-    ds = xu.UgridDataset(grids=xugrid)     
+    ds = xu.UgridDataset(grids=xugrid)
 
     da = xr.DataArray(
         data=z,
@@ -725,26 +728,63 @@ def snapwave_quadtree2mesh(qtr, file_name=None):
 
     if file_name is not None:
         ds.ugrid.to_netcdf(file_name)
-    
+
     return ds
 
 
+def odd(num: int) -> bool:
+    """Return ``True`` if *num* is odd.
 
-def odd(num):
+    Parameters
+    ----------
+    num : int
+        Value to test.
+
+    Returns
+    -------
+    bool
+    """
     if (num % 2) == 1:
         return True
     else:
         return False
 
 
-def even(num):
+def even(num: int) -> bool:
+    """Return ``True`` if *num* is even.
+
+    Parameters
+    ----------
+    num : int
+        Value to test.
+
+    Returns
+    -------
+    bool
+    """
     if (num % 2) == 0:
         return True
     else:
         return False
 
 
-def inpolygon(xq, yq, p):
+def inpolygon(xq: "np.ndarray", yq: "np.ndarray", p) -> "np.ndarray":
+    """Test which query points lie inside a Shapely polygon.
+
+    Parameters
+    ----------
+    xq : numpy.ndarray
+        X-coordinates of the query points.
+    yq : numpy.ndarray
+        Y-coordinates of the query points.
+    p : shapely.geometry.Polygon
+        Polygon to test against.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean array with the same shape as *xq*; ``True`` inside *p*.
+    """
     shape = xq.shape
     xq = xq.reshape(-1)
     yq = yq.reshape(-1)
@@ -761,7 +801,21 @@ def inpolygon(xq, yq, p):
 #    return mp.within(p)
 
 
-def binary_search(vals, val):
+def binary_search(vals: "np.ndarray", val: int) -> int | None:
+    """Search for *val* in a sorted array and return its index or ``None``.
+
+    Parameters
+    ----------
+    vals : numpy.ndarray
+        Sorted 1-D array to search in.
+    val : int
+        Value to look up.
+
+    Returns
+    -------
+    int or None
+        Index of *val* in *vals*, or ``None`` if not found.
+    """
     indx = np.searchsorted(vals, val)
     if indx < np.size(vals):
         if vals[indx] == val:

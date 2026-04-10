@@ -1,17 +1,48 @@
+"""Return-period flood level calculator for SFINCS ensemble output.
+
+Provides a function to compute return-period water level maps from a set
+of SFINCS ensemble simulations using linear exceedance probability interpolation.
+"""
+
 import os
-import xugrid as xu
-import xarray as xr
+
 import numpy as np
 import pandas as pd
+import xarray as xr
+import xugrid as xu
 from numpy import matlib
 
-def calculate_rp_flood_levels(sim_paths, frequencies, flood_map_rp, result_path):
-    """Calculate flood risk maps from a set of (currently) SFINCS water level outputs using linear interpolation.
 
-    It would be nice to make it more widely applicable and move the loading of the SFINCS results to self.postprocess_sfincs().
+def calculate_rp_flood_levels(
+    sim_paths: list,
+    frequencies: list,
+    flood_map_rp: list,
+    result_path: str,
+) -> None:
+    """Calculate return-period flood level maps from SFINCS ensemble output.
 
-    Generates return period water level maps in netcdf format
+    Reads the maximum water level (``zsmax``) from each simulation in
+    *sim_paths*, fits a linear exceedance-probability curve per grid cell,
+    and interpolates to the requested return periods in *flood_map_rp*.
+    Results are written as NetCDF files to *result_path*.
 
+    Parameters
+    ----------
+    sim_paths : list[str]
+        Paths to the SFINCS simulation folders, each containing a
+        ``sfincs_map.nc`` file.
+    frequencies : list[float]
+        Annual exceedance frequencies corresponding to each entry in
+        *sim_paths* (e.g. ``[0.5, 0.1, 0.02]`` for 2-, 10- and 50-year
+        return periods).
+    flood_map_rp : list[float]
+        Return periods (years) for which output flood maps are requested.
+    result_path : str
+        Directory to write the output NetCDF files.
+
+    Returns
+    -------
+    None
     """
 
     zs_maps = []
@@ -86,9 +117,7 @@ def calculate_rp_flood_levels(sim_paths, frequencies, flood_map_rp, result_path)
 
     for ii, rp in enumerate(flood_map_rp):
         print(f"Writing {result_path}/RP_{rp:05d}.nc")
-        zs_rp_single = xr.DataArray(
-            data=h[ii, :], attrs={"units": "meters"}
-        ).unstack()
+        zs_rp_single = xr.DataArray(data=h[ii, :], attrs={"units": "meters"}).unstack()
         zs_rp_single = zs_rp_single.to_dataset(name="risk_map")
         fn_rp = os.path.join(result_path, f"RP_{rp:05d}.nc")
         zs_rp_single.to_netcdf(fn_rp)

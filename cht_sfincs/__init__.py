@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Apr 25 10:58:08 2021
+"""SFINCS coastal flood model interface for the CHT toolkit.
 
-@author: ormondt
+Provides the SFINCS domain class and XMI wrapper for programmatic access to the
+SFINCS flood model kernel.
 """
 
-from .sfincs import SFINCS
-from .xmi import SfincsXmi
-from .flood_map import FloodMap
+from .sfincs import SFINCS  # noqa: F401
+from .xmi import SfincsXmi  # noqa: F401

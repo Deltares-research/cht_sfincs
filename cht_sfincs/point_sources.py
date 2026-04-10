@@ -1,19 +1,39 @@
-# -*- coding: utf-8 -*-
+"""SFINCS point source/sink utilities (stub).
+
+Provides the SfincsPointSources class for managing point source boundary
+conditions; the read/write methods are not yet fully implemented.
 """
-Created on Sat Jun 18 09:03:08 2022
-@author: ormondt
-"""
+
 import os
+
 import geopandas as gpd
-import shapely
 import pandas as pd
+import shapely
+
 
 class SfincsPointSources:
-    def __init__(self, hw):
-        self.model = hw
-        self.gdf  = gpd.GeoDataFrame()
+    """SFINCS point source/sink manager (stub).
 
-    def read(self):
+    Placeholder class for point source boundary conditions; the read/write
+    methods are not yet fully implemented.
+
+    Parameters
+    ----------
+    hw : SFINCS
+        The parent SFINCS model instance.
+    """
+
+    def __init__(self, hw: "SFINCS") -> None:
+        self.model = hw
+        self.gdf = gpd.GeoDataFrame()
+
+    def read(self) -> None:
+        """Read point source data (not yet implemented).
+
+        Returns
+        -------
+        None
+        """
         # Read in all observation points
         return
 
@@ -23,8 +43,13 @@ class SfincsPointSources:
         file_name = os.path.join(self.model.path, self.model.input.variables.obsfile)
 
         # Read the bnd file
-        df = pd.read_csv(file_name, index_col=False, header=None,
-             delim_whitespace=True, names=['x', 'y', 'name'])
+        df = pd.read_csv(
+            file_name,
+            index_col=False,
+            header=None,
+            delim_whitespace=True,
+            names=["x", "y", "name"],
+        )
 
         gdf_list = []
         # Loop through points
@@ -37,37 +62,63 @@ class SfincsPointSources:
             gdf_list.append(d)
         self.gdf = gpd.GeoDataFrame(gdf_list, crs=self.model.crs)
 
-    def write(self, file_name=None):
+    def write(self, file_name: str | None = None) -> None:
+        """Write point source data (not yet implemented).
+
+        Parameters
+        ----------
+        file_name : str, optional
+            Override path for the output file.
+
+        Returns
+        -------
+        None
+        """
         return
 
-        if len(self.gdf.index)==0:
+        if len(self.gdf.index) == 0:
             return
 
         if not file_name:
             if not self.model.input.variables.obsfile:
                 return
-            file_name = os.path.join(self.model.path, self.model.input.variables.obsfile)
-        
-        if self.model.crs.is_geographic:
-            fid = open(file_name, "w")
-            for index, row in self.gdf.iterrows():
-                x = row["geometry"].coords[0][0]
-                y = row["geometry"].coords[0][1]
-                name = row["name"]
-                string = f'{x:12.6f}{y:12.6f}  "{name}"\n'
-                fid.write(string)
-            fid.close()
-        else:
-            fid = open(file_name, "w")
-            for index, row in self.gdf.iterrows():
-                x = row["geometry"].coords[0][0]
-                y = row["geometry"].coords[0][1]
-                name = row["name"]
-                string = f'{x:12.1f}{y:12.1f}  "{name}"\n'
-                fid.write(string)
-            fid.close()
+            file_name = os.path.join(
+                self.model.path, self.model.input.variables.obsfile
+            )
 
-    def add_point(self, x, y, name):
+        if self.model.crs.is_geographic:
+            with open(file_name, "w") as fid:
+                for index, row in self.gdf.iterrows():
+                    x = row["geometry"].coords[0][0]
+                    y = row["geometry"].coords[0][1]
+                    name = row["name"]
+                    string = f'{x:12.6f}{y:12.6f}  "{name}"\n'
+                    fid.write(string)
+        else:
+            with open(file_name, "w") as fid:
+                for index, row in self.gdf.iterrows():
+                    x = row["geometry"].coords[0][0]
+                    y = row["geometry"].coords[0][1]
+                    name = row["name"]
+                    string = f'{x:12.1f}{y:12.1f}  "{name}"\n'
+                    fid.write(string)
+
+    def add_point(self, x: float, y: float, name: str) -> None:
+        """Add a point source at (x, y).
+
+        Parameters
+        ----------
+        x : float
+            X-coordinate of the point source.
+        y : float
+            Y-coordinate of the point source.
+        name : str
+            Name label for the point source.
+
+        Returns
+        -------
+        None
+        """
         point = shapely.geometry.Point(x, y)
         gdf_list = []
         d = {"name": name, "long_name": None, "geometry": point}
@@ -75,25 +126,49 @@ class SfincsPointSources:
         gdf_new = gpd.GeoDataFrame(gdf_list, crs=self.model.crs)
         self.gdf = pd.concat([self.gdf, gdf_new], ignore_index=True)
 
-    def delete_point(self, name_or_index):
-        if type(name_or_index) == str:
+    def delete_point(self, name_or_index: str | int) -> None:
+        """Delete a point source by name or row index.
+
+        Parameters
+        ----------
+        name_or_index : str or int
+            Name string or zero-based integer row index.
+
+        Returns
+        -------
+        None
+        """
+        if isinstance(name_or_index, str):
             name = name_or_index
             for index, row in self.gdf.iterrows():
                 if row["name"] == name:
                     self.gdf = self.gdf.drop(index).reset_index(drop=True)
                     return
-            print("Point " + name + " not found!")    
+            print(f"Point {name} not found!")
         else:
             index = name_or_index
             if len(self.gdf.index) < index + 1:
-                print("Index exceeds length!")    
+                print("Index exceeds length!")
             self.gdf = self.gdf.drop(index).reset_index(drop=True)
             return
-        
-    def clear(self):
-        self.gdf  = gpd.GeoDataFrame()
 
-    def list_observation_points(self):
+    def clear(self) -> None:
+        """Remove all point sources.
+
+        Returns
+        -------
+        None
+        """
+        self.gdf = gpd.GeoDataFrame()
+
+    def list_observation_points(self) -> list:
+        """Return a list of all point source names.
+
+        Returns
+        -------
+        list[str]
+            Point source names in GeoDataFrame order.
+        """
         names = []
         for index, row in self.gdf.iterrows():
             names.append(row["name"])
