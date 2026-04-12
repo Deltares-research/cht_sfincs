@@ -29,3 +29,4 @@ dependencies = [ "numpy",
                  "cht_tide@ git+https://github.com/deltares-research/cht_tide.git",
                  "cht_tiling@ git+https://github.com/deltares-research/cht_tiling.git",
 				]
+
