@@ -54,7 +54,7 @@ class SFINCS:
     def __init__(
         self,
         root: str | None = None,
-        crs: int | "CRS" = 3395,
+        crs: int | CRS = 3395,
         mode: str = "w",
         read_grid_data: bool = True,
     ) -> None:
